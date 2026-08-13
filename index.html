@@ -2,75 +2,79 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Mão Virtual - Estilo Meta Quest 3</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carregamento seguro e direto do MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1635913746/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620919413/drawing_utils.js"></script>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            margin: 0;
             overflow: hidden;
             background: linear-gradient(135deg, #1a0f2e, #2e1a47, #1a2b4a);
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            width: 100vw;
         }
         #video {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
             object-fit: cover;
-            opacity: 0.25;
+            opacity: 0.2;
             transform: scaleX(-1);
         }
         #canvas {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
             transform: scaleX(-1);
         }
         .info {
             position: absolute;
-            top: 20px;
+            top: max(15px, env(safe-area-inset-top));
             left: 50%;
             transform: translateX(-50%);
             color: white;
             text-align: center;
             z-index: 10;
-            text-shadow: 0 0 10px rgba(0,255,255,0.7);
+            text-shadow: 0 0 12px rgba(0,255,255,0.7);
+            padding: 0 15px;
         }
         .status {
             position: absolute;
-            bottom: 25px;
+            bottom: max(20px, env(safe-area-inset-bottom));
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.65);
             padding: 12px 25px;
             border-radius: 50px;
             color: #a0f0ff;
             border: 1px solid rgba(0,255,255,0.3);
+            font-size: 15px;
+            z-index: 10;
         }
+        .erro { color: #ff8888; border-color: #ff6666; }
     </style>
 </head>
 <body>
     <div class="info">
-        <h1 class="text-[clamp(1.5rem,5vw,2.8rem)] font-bold text-cyan-300">Mão Virtual Estilo Meta Quest 3</h1>
-        <p class="text-cyan-100">Coloque a mão na frente da câmera ✋</p>
+        <h1 class="text-[clamp(1.3rem,4vw,2.2rem)] font-bold text-cyan-300">Mão Virtual ✋</h1>
+        <p class="text-cyan-100 text-sm">Permita a câmera e aproxime as mãos</p>
     </div>
 
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
-
-    <div class="status" id="status">🔄 Carregando câmera e rastreamento...</div>
+    <div class="status" id="status">🔄 Preparando...</div>
 
     <script>
         const videoElement = document.getElementById('video');
         const canvasElement = document.getElementById('canvas');
-        const canvasCtx = canvasElement.getContext('2d');
+        const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: true });
         const statusText = document.getElementById('status');
 
         // Ajusta tamanho do canvas
@@ -81,95 +85,91 @@
         window.addEventListener('resize', ajustarTamanho);
         ajustarTamanho();
 
-        // Inicializa rastreador de mãos (MediaPipe Hands - tecnologia parecida com a do Quest!)
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
+        // Espera carregar tudo antes de iniciar
+        window.addEventListener('DOMContentLoaded', () => {
+            statusText.innerText = "🔄 Carregando rastreador de mãos...";
 
-        hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1, // 0 = mais rápido | 1 = mais preciso
-            minDetectionConfidence: 0.6,
-            minTrackingConfidence: 0.6
-        });
+            // Inicializa rastreador
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
 
-        // Quando detecta a mão
-        hands.onResults((results) => {
-            statusText.innerText = results.multiHandLandmarks 
-                ? "✅ Mão detectada! Movimente à vontade!" 
-                : "⏳ Aguardando mão...";
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.65,
+                minTrackingConfidence: 0.65
+            });
 
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            hands.onResults((results) => {
+                statusText.innerText = results.multiHandLandmarks 
+                    ? "✅ Mão detectada! Movimente!" 
+                    : "⏳ Aguardando mão...";
 
-            if (results.multiHandLandmarks) {
-                for (const landmarks of results.multiHandLandmarks) {
-                    // DESENHO ESTILIZADO - NÃO É ESQUELETO!
-                    // Desenha linhas suaves e brilhantes entre os dedos
-                    canvasCtx.lineWidth = 6;
-                    canvasCtx.lineCap = 'round';
-                    canvasCtx.lineJoin = 'round';
-                    
-                    // Cores bonitas com brilho
-                    const gradiente = canvasCtx.createLinearGradient(0,0, canvasElement.width, canvasElement.height);
-                    gradiente.addColorStop(0, 'rgba(0, 255, 255, 0.85)');
-                    gradiente.addColorStop(1, 'rgba(180, 120, 255, 0.85)');
-                    canvasCtx.strokeStyle = gradiente;
-                    canvasCtx.shadowColor = '#00ffff';
-                    canvasCtx.shadowBlur = 15;
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-                    // Liga os pontos com curvas suaves
-                    const pontos = [0, 1, 2, 3, 4, 0, 5, 6, 7, 8, 9, 10, 11, 12, 5, 9, 13, 14, 15, 16, 17, 18, 19, 20];
-                    
-                    canvasCtx.beginPath();
-                    for(let i=0; i<pontos.length; i++){
-                        const ponto = landmarks[pontos[i]];
-                        const x = ponto.x * canvasElement.width;
-                        const y = ponto.y * canvasElement.height;
-                        
-                        if(i === 0) canvasCtx.moveTo(x, y);
-                        else canvasCtx.lineTo(x, y);
+                if (results.multiHandLandmarks) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        // Linhas brilhantes e suaves
+                        canvasCtx.lineWidth = 6;
+                        canvasCtx.lineCap = 'round';
+                        canvasCtx.lineJoin = 'round';
+                        const gradiente = canvasCtx.createLinearGradient(0,0, canvasElement.width, canvasElement.height);
+                        gradiente.addColorStop(0, 'rgba(0, 255, 255, 0.85)');
+                        gradiente.addColorStop(1, 'rgba(180, 120, 255, 0.85)');
+                        canvasCtx.strokeStyle = gradiente;
+                        canvasCtx.shadowColor = '#00ffff';
+                        canvasCtx.shadowBlur = 18;
+
+                        const pontos = [0,1,2,3,4,0,5,6,7,8,9,10,11,12,5,9,13,14,15,16,17,18,19,20];
+                        canvasCtx.beginPath();
+                        for(let i=0; i<pontos.length; i++){
+                            const p = landmarks[pontos[i]];
+                            const x = p.x * canvasElement.width;
+                            const y = p.y * canvasElement.height;
+                            i===0 ? canvasCtx.moveTo(x,y) : canvasCtx.lineTo(x,y);
+                        }
+                        canvasCtx.stroke();
+
+                        // Pontas brilhantes
+                        const dedos = [4,8,12,16,20];
+                        dedos.forEach(i => {
+                            const p = landmarks[i];
+                            const x = p.x * canvasElement.width;
+                            const y = p.y * canvasElement.height;
+                            const gradBola = canvasCtx.createRadialGradient(x,y,0,x,y,22);
+                            gradBola.addColorStop(0,'rgba(255,255,255,0.95)');
+                            gradBola.addColorStop(1,'rgba(0,255,255,0)');
+                            canvasCtx.beginPath();
+                            canvasCtx.arc(x,y,22,0,Math.PI*2);
+                            canvasCtx.fillStyle = gradBola;
+                            canvasCtx.fill();
+                            canvasCtx.beginPath();
+                            canvasCtx.arc(x,y,7,0,Math.PI*2);
+                            canvasCtx.fillStyle = '#fff';
+                            canvasCtx.fill();
+                        });
                     }
-                    canvasCtx.stroke();
-
-                    // Desenha bolas brilhantes nas pontas dos dedos
-                    const dedos = [4, 8, 12, 16, 20]; // pontas dos dedos
-                    dedos.forEach(indice => {
-                        const ponto = landmarks[indice];
-                        const x = ponto.x * canvasElement.width;
-                        const y = ponto.y * canvasElement.height;
-
-                        // Bola brilhante
-                        const gradienteBola = canvasCtx.createRadialGradient(x,y,0, x,y,20);
-                        gradienteBola.addColorStop(0, 'rgba(255,255,255,0.9)');
-                        gradienteBola.addColorStop(1, 'rgba(0,255,255,0)');
-                        
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(x, y, 20, 0, Math.PI*2);
-                        canvasCtx.fillStyle = gradienteBola;
-                        canvasCtx.fill();
-
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(x, y, 7, 0, Math.PI*2);
-                        canvasCtx.fillStyle = 'white';
-                        canvasCtx.fill();
-                    });
                 }
-            }
-        });
+            });
 
-        // Inicia câmera
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 1280,
-            height: 720
-        });
-        camera.start()
-        .catch(err => {
-            statusText.innerHTML = "❌ Erro: Permita acesso à câmera!";
-            alert("Permita o acesso à câmera para funcionar!");
+            // Inicia câmera com tratamento de erro
+            statusText.innerText = "🔄 Solicitando permissão da câmera...";
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 1280, height: 720
+            });
+
+            camera.start()
+            .then(() => { statusText.innerText = "✅ Pronto! Aproxime as mãos!"; })
+            .catch(err => {
+                statusText.className = "status erro";
+                statusText.innerHTML = "❌ Erro! Permita a câmera nas configurações do site!";
+                console.error("Erro:", err);
+                alert("Para funcionar, você precisa PERMITIR o uso da câmera quando o navegador pedir!");
+            });
         });
     </script>
 </body>
 </html>
+
