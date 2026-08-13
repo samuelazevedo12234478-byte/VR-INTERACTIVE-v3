@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mão Virtual - Estilo Meta Quest 3</title>
+    <title>Mão Virtual VR</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Carregamento seguro e direto do MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1635913746/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620919413/drawing_utils.js"></script>
@@ -13,10 +12,28 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             overflow: hidden;
-            background: linear-gradient(135deg, #1a0f2e, #2e1a47, #1a2b4a);
+            background: #0a0a0a; /* Preto suave, não total */
             font-family: 'Segoe UI', Roboto, sans-serif;
             height: 100vh;
             width: 100vw;
+            position: fixed;
+        }
+        /* Trava sempre deitado */
+        @media (orientation: portrait) {
+            body { transform: rotate(90deg); transform-origin: left top; width: 100vh; height: 100vw; }
+        }
+        /* Título bem visível */
+        h1 {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #f0f0f0;
+            font-size: clamp(1.8rem, 6vw, 3rem);
+            font-weight: bold;
+            z-index: 20;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
         }
         #video {
             position: absolute;
@@ -24,8 +41,9 @@
             width: 100vw;
             height: 100vh;
             object-fit: cover;
-            opacity: 0.2;
+            opacity: 0.12; /* Bem fraquinha pra não atrapalhar */
             transform: scaleX(-1);
+            display: none;
         }
         #canvas {
             position: absolute;
@@ -33,51 +51,59 @@
             width: 100vw;
             height: 100vh;
             transform: scaleX(-1);
-        }
-        .info {
-            position: absolute;
-            top: max(15px, env(safe-area-inset-top));
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            text-align: center;
             z-index: 10;
-            text-shadow: 0 0 12px rgba(0,255,255,0.7);
-            padding: 0 15px;
+        }
+        /* Botão azul neon brilhante - bem visível */
+        #btnIniciar {
+            position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 30;
+            background: linear-gradient(135deg, #0099ff, #00eeff, #00ccff);
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 22px;
+            padding: 18px 45px;
+            border-radius: 60px;
+            border: none;
+            box-shadow: 0 0 25px #00ccff, 0 0 50px rgba(0,204,255,0.5), 0 0 75px rgba(0,238,255,0.3);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        #btnIniciar:active {
+            transform: translate(-50%, -50%) scale(0.96);
+            box-shadow: 0 0 35px #00eeff, 0 0 60px rgba(0,238,255,0.6);
         }
         .status {
             position: absolute;
-            bottom: max(20px, env(safe-area-inset-bottom));
+            bottom: 25px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.65);
+            background: rgba(20,20,20,0.8);
             padding: 12px 25px;
             border-radius: 50px;
-            color: #a0f0ff;
-            border: 1px solid rgba(0,255,255,0.3);
-            font-size: 15px;
-            z-index: 10;
+            color: #dddddd;
+            border: 1px solid #555;
+            font-size: 16px;
+            z-index: 25;
         }
-        .erro { color: #ff8888; border-color: #ff6666; }
     </style>
 </head>
 <body>
-    <div class="info">
-        <h1 class="text-[clamp(1.3rem,4vw,2.2rem)] font-bold text-cyan-300">Mão Virtual ✋</h1>
-        <p class="text-cyan-100 text-sm">Permita a câmera e aproxime as mãos</p>
-    </div>
+    <h1>Mão Virtual VR</h1>
 
+    <button id="btnIniciar">📷 Iniciar Câmera Traseira</button>
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
-    <div class="status" id="status">🔄 Preparando...</div>
+    <div class="status" id="status">⏳ Pronto! Aperte o botão para começar</div>
 
     <script>
         const videoElement = document.getElementById('video');
         const canvasElement = document.getElementById('canvas');
         const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: true });
         const statusText = document.getElementById('status');
+        const btnIniciar = document.getElementById('btnIniciar');
+        let hands, camera;
 
-        // Ajusta tamanho do canvas
         function ajustarTamanho() {
             canvasElement.width = window.innerWidth;
             canvasElement.height = window.innerHeight;
@@ -85,41 +111,34 @@
         window.addEventListener('resize', ajustarTamanho);
         ajustarTamanho();
 
-        // Espera carregar tudo antes de iniciar
-        window.addEventListener('DOMContentLoaded', () => {
-            statusText.innerText = "🔄 Carregando rastreador de mãos...";
-
-            // Inicializa rastreador
-            const hands = new Hands({
+        function iniciarRastreamento() {
+            statusText.innerText = "🔄 Carregando sistema...";
+            hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
             });
-
             hands.setOptions({
                 maxNumHands: 2,
                 modelComplexity: 1,
-                minDetectionConfidence: 0.65,
-                minTrackingConfidence: 0.65
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
             });
-
             hands.onResults((results) => {
                 statusText.innerText = results.multiHandLandmarks 
-                    ? "✅ Mão detectada! Movimente!" 
+                    ? "✅ Mão detectada!" 
                     : "⏳ Aguardando mão...";
-
                 canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
                 if (results.multiHandLandmarks) {
                     for (const landmarks of results.multiHandLandmarks) {
-                        // Linhas brilhantes e suaves
-                        canvasCtx.lineWidth = 6;
+                        // Linha da mão: cinza -> branco degradê
+                        canvasCtx.lineWidth = 7;
                         canvasCtx.lineCap = 'round';
                         canvasCtx.lineJoin = 'round';
                         const gradiente = canvasCtx.createLinearGradient(0,0, canvasElement.width, canvasElement.height);
-                        gradiente.addColorStop(0, 'rgba(0, 255, 255, 0.85)');
-                        gradiente.addColorStop(1, 'rgba(180, 120, 255, 0.85)');
+                        gradiente.addColorStop(0, 'rgba(130,130,130,0.85)');
+                        gradiente.addColorStop(1, 'rgba(245,245,245,0.95)');
                         canvasCtx.strokeStyle = gradiente;
-                        canvasCtx.shadowColor = '#00ffff';
-                        canvasCtx.shadowBlur = 18;
+                        canvasCtx.shadowColor = '#ffffff';
+                        canvasCtx.shadowBlur = 12;
 
                         const pontos = [0,1,2,3,4,0,5,6,7,8,9,10,11,12,5,9,13,14,15,16,17,18,19,20];
                         canvasCtx.beginPath();
@@ -131,45 +150,47 @@
                         }
                         canvasCtx.stroke();
 
-                        // Pontas brilhantes
+                        // Pontas brancas brilhantes
                         const dedos = [4,8,12,16,20];
                         dedos.forEach(i => {
                             const p = landmarks[i];
                             const x = p.x * canvasElement.width;
                             const y = p.y * canvasElement.height;
-                            const gradBola = canvasCtx.createRadialGradient(x,y,0,x,y,22);
-                            gradBola.addColorStop(0,'rgba(255,255,255,0.95)');
-                            gradBola.addColorStop(1,'rgba(0,255,255,0)');
+                            const gradPonta = canvasCtx.createRadialGradient(x,y,0,x,y,24);
+                            gradPonta.addColorStop(0, 'rgba(255,255,255,0.95)');
+                            gradPonta.addColorStop(1, 'rgba(200,200,200,0.2)');
                             canvasCtx.beginPath();
-                            canvasCtx.arc(x,y,22,0,Math.PI*2);
-                            canvasCtx.fillStyle = gradBola;
+                            canvasCtx.arc(x,y,24,0,Math.PI*2);
+                            canvasCtx.fillStyle = gradPonta;
                             canvasCtx.fill();
                             canvasCtx.beginPath();
-                            canvasCtx.arc(x,y,7,0,Math.PI*2);
-                            canvasCtx.fillStyle = '#fff';
+                            canvasCtx.arc(x,y,8,0,Math.PI*2);
+                            canvasCtx.fillStyle = '#ffffff';
                             canvasCtx.fill();
                         });
                     }
                 }
             });
-
-            // Inicia câmera com tratamento de erro
-            statusText.innerText = "🔄 Solicitando permissão da câmera...";
-            const camera = new Camera(videoElement, {
+            // Câmera TRASEIRA
+            camera = new Camera(videoElement, {
                 onFrame: async () => { await hands.send({image: videoElement}); },
-                width: 1280, height: 720
+                width: 1280, height: 720,
+                facingMode: { exact: "environment" }
             });
-
             camera.start()
-            .then(() => { statusText.innerText = "✅ Pronto! Aproxime as mãos!"; })
+            .then(() => {
+                statusText.innerText = "✅ Pronto! Coloque a mão na frente!";
+                btnIniciar.style.display = 'none';
+                videoElement.style.display = 'block';
+            })
             .catch(err => {
-                statusText.className = "status erro";
-                statusText.innerHTML = "❌ Erro! Permita a câmera nas configurações do site!";
+                statusText.style.color = '#ff8888';
+                statusText.innerHTML = "❌ Erro! Permita a câmera traseira!";
                 console.error("Erro:", err);
-                alert("Para funcionar, você precisa PERMITIR o uso da câmera quando o navegador pedir!");
             });
-        });
+        }
+
+        btnIniciar.addEventListener('click', iniciarRastreamento);
     </script>
 </body>
 </html>
-
