@@ -3,14 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Realidade Aumentada - Luva 3D e Tela Fixa</title>
+  <title>Realidade Aumentada - Mão & Tela Fixa</title>
   
-  <!-- Bibliotecas de AR, 3D e Tracking -->
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
   <style>
     * {
       box-sizing: border-box;
@@ -22,40 +16,61 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      background-color: #000;
       font-family: Arial, sans-serif;
     }
 
-    /* Interface de controle flutuante */
+    /* Vídeo da Câmera no fundo */
+    #webcam {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    /* Camada 3D da AR por cima da câmera */
+    #canvas3d {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Interface do Botão na camada de topo */
     #ui-container {
       position: fixed;
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 99999;
+      z-index: 9999;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 10px;
       width: 90%;
       max-width: 400px;
-      pointer-events: none;
     }
 
-    .btn-ar {
-      pointer-events: auto;
-      padding: 14px 28px;
-      font-size: 1rem;
+    #startBtn {
+      padding: 16px 32px;
+      font-size: 1.1rem;
       font-weight: bold;
       color: #ffffff;
       background: #0066ff;
-      border: 2px solid #ffffff;
+      border: 3px solid #ffffff;
       border-radius: 30px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
       cursor: pointer;
     }
 
-    #status-log {
-      background: rgba(0, 0, 0, 0.75);
+    #log {
+      background: rgba(0, 0, 0, 0.8);
       color: #00ff88;
       padding: 8px 16px;
       border-radius: 20px;
@@ -63,99 +78,102 @@
       text-align: center;
       width: 100%;
     }
-
-    /* Esconde o vídeo bruto do MediaPipe para usar a câmera do A-Frame */
-    #webcam-hidden {
-      display: none;
-    }
   </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
   <div id="ui-container">
-    <button id="startBtn" class="btn-ar">INICIAR REALIDADE AUMENTADA</button>
-    <div id="status-log">Aguardando início...</div>
+    <button id="startBtn">INICIAR SESSÃO AR</button>
+    <div id="log">Clique no botão para ativar a Realidade Aumentada</div>
   </div>
 
-  <video id="webcam-hidden" playsinline></video>
-
-  <!-- Cena A-Frame com AR.js (WebAR) -->
-  <a-scene 
-    embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-    vr-mode-ui="enabled: false">
-
-    <!-- Iluminação da cena -->
-    <a-entity light="type: ambient; color: #FFF; intensity: 0.8"></a-entity>
-    <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="-0.5 1 1"></a-entity>
-
-    <!-- Marcador / Âncora Espacial: A tela e a luva ficam ancoradas no espaço -->
-    <a-marker preset="hiro" id="ar-anchor">
-      
-      <!-- Painel/Tela Branca Virtual (Estilo Interface Quest) -->
-      <a-plane 
-        id="virtual-screen"
-        position="0 1.2 -0.5" 
-        rotation="-15 0 0"
-        width="1.8" 
-        height="1.0" 
-        color="#FFFFFF"
-        material="shader: flat; opacity: 0.95"
-        shadow>
-        
-        <!-- Borda da tela -->
-        <a-plane position="0 0 -0.01" width="1.86" height="1.06" color="#333333"></a-plane>
-        
-        <!-- Texto de teste dentro da tela branca -->
-        <a-text 
-          value="TELA VIRTUAL AR" 
-          align="center" 
-          color="#111111" 
-          width="3" 
-          position="0 0.2 0.01">
-        </a-text>
-        <a-text 
-          value="Status: Rastreamento Ativo" 
-          align="center" 
-          color="#00aa55" 
-          width="2" 
-          position="0 -0.1 0.01">
-        </a-text>
-      </a-plane>
-
-      <!-- Grupo 3D reservado para o esqueleto/luva cinza da mão -->
-      <a-entity id="hand-container-3d"></a-entity>
-
-    </a-marker>
-
-    <!-- Câmera do usuário no mundo virtual -->
-    <a-entity camera></a-entity>
-  </a-scene>
+  <video id="webcam" playsinline webkit-playsinline></video>
+  <canvas id="canvas3d"></canvas>
 
   <script>
+    const video = document.getElementById('webcam');
+    const canvas3d = document.getElementById('canvas3d');
     const startBtn = document.getElementById('startBtn');
-    const statusLog = document.getElementById('status-log');
-    const hiddenVideo = document.getElementById('webcam-hidden');
-    const handContainer = document.getElementById('hand-container-3d');
+    const log = document.getElementById('log');
 
-    // --- CRIAÇÃO DA LUVA CINZA EM THREE.JS DENTRO DO A-FRAME ---
-    const joints3D = [];
+    // --- CENA THREE.JS (AR ESPACIAL) ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 0); // Posição da câmera do utilizador
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Iluminação
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(0, 5, 5);
+    scene.add(dirLight);
+
+    // --- 1. TELA BRANCA VIRTUAL FIXA NO MUNDO ---
+    const screenGeo = new THREE.PlaneGeometry(1.6, 0.9);
+    const screenMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const virtualScreen = new THREE.Mesh(screenGeo, screenMat);
+    
+    // Posiciona a tela 2 metros à frente no espaço virtual
+    virtualScreen.position.set(0, 0.2, -2);
+    scene.add(virtualScreen);
+
+    // Borda preta da tela branca
+    const borderGeo = new THREE.PlaneGeometry(1.66, 0.96);
+    const borderMat = new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide });
+    const screenBorder = new THREE.Mesh(borderGeo, borderMat);
+    screenBorder.position.set(0, 0.2, -2.01);
+    scene.add(screenBorder);
+
+
+    // --- 2. ESTRUTURA DA LUVA CINZA 3D ---
+    const handGroup = new THREE.Group();
+    scene.add(handGroup);
+
     const handMaterial = new THREE.MeshStandardMaterial({
       color: 0x888888,
       roughness: 0.3,
-      metalness: 0.5
+      metalness: 0.4
     });
 
-    // Criar as 21 esferas cinzas para as articulações
+    // Articulações da mão
+    const joints = [];
+    const jointGeo = new THREE.SphereGeometry(0.025, 16, 16);
+
     for (let i = 0; i < 21; i++) {
-      const sphereGeo = new THREE.SphereGeometry(0.02, 16, 16);
-      const mesh = new THREE.Mesh(sphereGeo, handMaterial);
-      mesh.visible = false;
-      handContainer.object3D.add(mesh);
-      joints3D.push(mesh);
+      const joint = new THREE.Mesh(jointGeo, handMaterial);
+      joint.visible = false;
+      handGroup.add(joint);
+      joints.push(joint);
     }
 
-    // --- CONFIGURAÇÃO DO MEDIAPIPE HANDS ---
+    // Ossos/Conexões
+    const boneGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 8);
+    const bones = [];
+
+    for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
+      const bone = new THREE.Mesh(boneGeo, handMaterial);
+      bone.visible = false;
+      handGroup.add(bone);
+      bones.push(bone);
+    }
+
+    // Render loop Three.js
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+
+    // --- 3. MEDIAPIPE HANDS (RASTREAMENTO) ---
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -163,55 +181,102 @@
     hands.setOptions({
       maxNumHands: 1,
       modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
     });
 
     hands.onResults((results) => {
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
 
+        // Atualizar pontos da luva cinza
         landmarks.forEach((lm, index) => {
-          // Converte coordenadas da tela para o espaço 3D da AR
-          const x = (lm.x - 0.5) * 1.5;
-          const y = -(lm.y - 0.5) * 1.5 + 0.5;
-          const z = -lm.z * 1.5;
+          const x = (lm.x - 0.5) * 2;
+          const y = -(lm.y - 0.5) * 2;
+          const z = -lm.z * 2 - 1; // Projeta a mão à frente no espaço 3D
 
-          joints3D[index].position.set(x, y, z);
-          joints3D[index].visible = true;
+          joints[index].position.set(x, y, z);
+          joints[index].visible = true;
+        });
+
+        // Atualizar conexões/ossos
+        HAND_CONNECTIONS.forEach((conn, index) => {
+          const p1 = joints[conn[0]].position;
+          const p2 = joints[conn[1]].position;
+
+          const bone = bones[index];
+          const dist = p1.distanceTo(p2);
+
+          bone.scale.set(1, dist, 1);
+          bone.position.copy(p1).add(p2).multiplyScalar(0.5);
+          bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
+          bone.visible = true;
         });
       } else {
-        joints3D.forEach(j => j.visible = false);
+        joints.forEach(j => j.visible = false);
+        bones.forEach(b => b.visible = false);
       }
     });
 
-    // --- LÓGICA DE INICIALIZAÇÃO DA CÂMERA ---
+
+    // --- 4. ATIVAÇÃO DE CÂMERA E GIROSCÓPIO ---
     startBtn.addEventListener('click', async () => {
-      statusLog.innerText = "Iniciando sistema AR...";
+      log.innerText = "Iniciando câmera e AR...";
       startBtn.style.display = "none";
 
+      // Ativar orientação do dispositivo para manter a tela fixa se suportado
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          await DeviceOrientationEvent.requestPermission();
+        } catch (e) {
+          console.warn("Permissão de giroscópio recusada.");
+        }
+      }
+
+      window.addEventListener('deviceorientation', (e) => {
+        if (e.alpha !== null) {
+          // Ajusta a rotação da câmera com base nos sensores do celular
+          const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
+          const beta = THREE.MathUtils.degToRad(e.beta || 0);
+          const gamma = THREE.MathUtils.degToRad(e.gamma || 0);
+
+          camera.rotation.set(beta, alpha, -gamma, 'YXZ');
+        }
+      });
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } }
-        });
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+          });
+        } catch (err) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
 
-        hiddenVideo.srcObject = stream;
-        await hiddenVideo.play();
+        video.srcObject = stream;
+        await video.play();
 
-        statusLog.innerText = "AR Ativa! Aponte a câmera para o marcador Hiro.";
+        log.innerText = "AR Ativa! Mostre a sua mão para ver a luva cinza.";
 
-        const processLoop = async () => {
-          if (!hiddenVideo.paused && !hiddenVideo.ended) {
-            await hands.send({ image: hiddenVideo });
+        const processFrame = async () => {
+          if (!video.paused && !video.ended) {
+            await hands.send({ image: video });
           }
-          requestAnimationFrame(processLoop);
+          requestAnimationFrame(processFrame);
         };
-        processLoop();
+        processFrame();
 
       } catch (err) {
-        statusLog.innerText = "Erro ao acessar a câmera: " + err.message;
+        log.innerText = "Erro ao acessar câmera: " + err.message;
         startBtn.style.display = "block";
       }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
 </body>
