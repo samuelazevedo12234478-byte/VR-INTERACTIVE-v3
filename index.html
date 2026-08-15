@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Luva 3D - Duas Mãos Ajustadas</title>
+  <title>Realidade Mista - Navegador Web 3D</title>
   
   <style>
     * {
@@ -20,6 +20,7 @@
       font-family: Arial, sans-serif;
     }
 
+    /* Feed da Câmera ao Fundo */
     #webcam {
       position: absolute;
       top: 0;
@@ -31,6 +32,7 @@
       display: block;
     }
 
+    /* Canvas 3D para as Luvas */
     #canvas3d {
       position: absolute;
       top: 0;
@@ -41,27 +43,85 @@
       pointer-events: none;
     }
 
+    /* JANELA DO NAVEGADOR VIRTUAL (Estilo Quest / EnjoyTheMR) */
+    #browser-window {
+      position: fixed;
+      top: 15%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 85vw;
+      max-width: 800px;
+      height: 60vh;
+      background: rgba(20, 20, 20, 0.9);
+      border: 2px solid #0066ff;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Barra Superior do Navegador */
+    .browser-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 15px;
+      background: #111;
+      border-bottom: 1px solid #333;
+    }
+
+    .browser-bar input {
+      flex: 1;
+      padding: 8px 14px;
+      border-radius: 20px;
+      border: 1px solid #444;
+      background: #222;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .browser-bar button {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: none;
+      background: #0066ff;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* Quadro onde os sites carregam */
+    #web-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    /* UI de Controle Superior */
     #ui-container {
       position: fixed;
-      top: 20px;
+      top: 10px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 9999;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
-      width: 90%;
-      max-width: 400px;
+      gap: 8px;
     }
 
     #startBtn {
-      padding: 16px 32px;
-      font-size: 1.1rem;
+      padding: 12px 24px;
+      font-size: 1rem;
       font-weight: bold;
       color: #ffffff;
       background: #0066ff;
-      border: 3px solid #ffffff;
+      border: 2px solid #ffffff;
       border-radius: 30px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.5);
       cursor: pointer;
@@ -70,15 +130,13 @@
     #log {
       background: rgba(0, 0, 0, 0.85);
       color: #00ff88;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 0.85rem;
+      padding: 6px 12px;
+      border-radius: 15px;
+      font-size: 0.8rem;
       text-align: center;
-      width: 100%;
     }
   </style>
 
-  <!-- CDNs: Three.js e MediaPipe -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -86,8 +144,16 @@
 <body>
 
   <div id="ui-container">
-    <button id="startBtn">LIGAR CÂMERA</button>
-    <div id="log">Toque para ativar as luvas 3D ajustadas nas duas mãos.</div>
+    <button id="startBtn">LIGAR CÂMERA & NAVEGADOR</button>
+    <div id="log">Aperte o botão para carregar a interface de MR.</div>
+  </div>
+
+  <div id="browser-window">
+    <div class="browser-bar">
+      <input type="text" id="urlInput" value="https://pt.wikipedia.org" placeholder="Digite uma URL (ex: https://bing.com)...">
+      <button id="goBtn">IR</button>
+    </div>
+    <iframe id="web-frame" src="https://pt.wikipedia.org"></iframe>
   </div>
 
   <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
@@ -98,6 +164,19 @@
     const canvas3d = document.getElementById('canvas3d');
     const startBtn = document.getElementById('startBtn');
     const log = document.getElementById('log');
+    
+    const urlInput = document.getElementById('urlInput');
+    const goBtn = document.getElementById('goBtn');
+    const webFrame = document.getElementById('web-frame');
+
+    // Navegação do Iframe
+    goBtn.addEventListener('click', () => {
+      let url = urlInput.value.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      webFrame.src = url;
+    });
 
     // --- CENA THREE.JS ---
     const scene = new THREE.Scene();
@@ -115,19 +194,16 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- CRIAÇÃO DE DUAS MÃOS CINZAS 3D (LIGEIRAMENTE AUMENTADAS) ---
+    // --- DUAS MÃOS 3D CINZAS ---
     const handMaterial = new THREE.MeshStandardMaterial({
       color: 0x888888,
       roughness: 0.3,
       metalness: 0.5
     });
 
-    // Esferas aumentadas levemente de 0.06 para 0.08
     const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
-    // Cilindros aumentados levemente de 0.03 para 0.04
     const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
 
-    // Estrutura para armazenar 2 mãos
     const hands3D = [];
 
     for (let h = 0; h < 2; h++) {
@@ -196,14 +272,12 @@
 
           const h3d = hands3D[handIndex];
 
-          // Atualiza posições das articulações
           landmarks.forEach((lm, index) => {
             const pos = mapTo3DSpace(lm);
             h3d.joints[index].position.copy(pos);
             h3d.joints[index].visible = true;
           });
 
-          // Atualiza ossos/conexões
           HAND_CONNECTIONS.forEach((conn, index) => {
             const p1 = h3d.joints[conn[0]].position;
             const p2 = h3d.joints[conn[1]].position;
@@ -245,7 +319,7 @@
           };
         });
 
-        log.innerText = "Câmera Ativa! Coloque as mãos na tela.";
+        log.innerText = "Navegador AR Ativo!";
 
         const processFrame = async () => {
           if (!video.paused && !video.ended) {
