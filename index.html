@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rastreamento de Mão - Câmera Visível</title>
+  <title>Rastreamento de Mão</title>
   <style>
     * {
       box-sizing: border-box;
@@ -14,12 +14,36 @@
     body, html {
       width: 100%;
       height: 100%;
-      overflow: hidden;
-      background-color: #f0f0f0; /* Fundo claro inicial */
+      background-color: #121212;
       font-family: sans-serif;
+      overflow: hidden;
     }
 
-    /* O vídeo fica VISÍVEL e ocupa toda a tela */
+    /* O botão fica fixo no centro e na camada mais ALTA (z-index: 9999) */
+    #startBtn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+      padding: 18px 36px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #ffffff;
+      background-color: #007bff;
+      border: 3px solid #ffffff;
+      border-radius: 50px;
+      box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.8);
+      cursor: pointer;
+      opacity: 1 !important; /* Força ficar totalmente opaco */
+    }
+
+    #startBtn:active {
+      background-color: #0056b3;
+      transform: translate(-50%, -50%) scale(0.95);
+    }
+
+    /* O vídeo fica atrás */
     video {
       position: absolute;
       top: 0;
@@ -30,7 +54,7 @@
       z-index: 1;
     }
 
-    /* O canvas fica EXATAMENTE por cima do vídeo */
+    /* O canvas do esqueleto da mão fica no meio */
     canvas {
       position: absolute;
       top: 0;
@@ -39,63 +63,43 @@
       height: 100vh;
       object-fit: cover;
       z-index: 2;
-      pointer-events: none; /* Deixa cliques passarem */
+      pointer-events: none; /* Não bloqueia toques */
     }
 
-    #startBtn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 10;
-      padding: 16px 32px;
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: #fff;
-      background-color: #007bff;
-      border: none;
-      border-radius: 30px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-      cursor: pointer;
-    }
-
-    #statusLog {
-      position: absolute;
+    #log {
+      position: fixed;
       bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #ffffff;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-      font-size: 1rem;
-      font-weight: bold;
-      text-align: center;
+      left: 5% ;
       width: 90%;
-      z-index: 10;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 12px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      z-index: 9998;
+      text-align: center;
     }
   </style>
 
-  <!-- CDNs do MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-  <button id="startBtn">Ligar Câmera Traseira</button>
+  <button id="startBtn">LIGAR CÂMERA</button>
+
+  <video id="webcam" playsinline webkit-playsinline></video>
   
-  <!-- Elemento de Vídeo para ver a câmera de verdade -->
-  <video id="webcam" playsinline></video>
-  
-  <!-- Canvas para desenhar as linhas da mão por cima -->
   <canvas id="output_canvas"></canvas>
-  
-  <div id="statusLog">Clique no botão acima para começar</div>
+
+  <div id="log">Status: Toque no botão azul acima para iniciar.</div>
 
   <script>
-    const videoElement = document.getElementById('webcam');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('output_canvas');
+    const ctx = canvas.getContext('2d');
+    const log = document.getElementById('log');
     const startBtn = document.getElementById('startBtn');
-    const statusLog = document.getElementById('statusLog');
 
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
@@ -109,218 +113,75 @@
     });
 
     hands.onResults((results) => {
-      // Sincroniza a dimensão interna do canvas com a resolução real do vídeo
-      if (videoElement.videoWidth && videoElement.videoHeight) {
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
-      }
+      canvas.width = video.videoWidth || window.innerWidth;
+      canvas.height = video.videoHeight || window.innerHeight;
 
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Desenha as articulações e linhas caso identifique mãos
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
-          
-          // Desenha as conexões verdes
+          // Linhas de conexão estilo Quest
           for (const connection of HAND_CONNECTIONS) {
             const from = landmarks[connection[0]];
             const to = landmarks[connection[1]];
-            
-            canvasCtx.beginPath();
-            canvasCtx.moveTo(from.x * canvasElement.width, from.y * canvasElement.height);
-            canvasCtx.lineTo(to.x * canvasElement.width, to.y * canvasElement.height);
-            canvasCtx.strokeStyle = '#00FF88';
-            canvasCtx.lineWidth = 5;
-            canvasCtx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(from.x * canvas.width, from.y * canvas.height);
+            ctx.lineTo(to.x * canvas.width, to.y * canvas.height);
+            ctx.strokeStyle = '#00FF88';
+            ctx.lineWidth = 5;
+            ctx.stroke();
           }
 
-          // Desenha os pontos rosa
+          // Pontos das articulações
           for (const landmark of landmarks) {
-            const x = landmark.x * canvasElement.width;
-            const y = landmark.y * canvasElement.height;
-
-            canvasCtx.beginPath();
-            canvasCtx.arc(x, y, 7, 0, 2 * Math.PI);
-            canvasCtx.fillStyle = '#FF0055';
-            canvasCtx.fill();
+            const x = landmark.x * canvas.width;
+            const y = landmark.y * canvas.height;
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FF0055';
+            ctx.fill();
           }
         }
       }
-      canvasCtx.restore();
+      ctx.restore();
     });
 
-    async function startCamera() {
-      startBtn.style.display = 'none';
-      statusLog.innerText = "Iniciando câmera traseira...";
+    startBtn.addEventListener('click', async () => {
+      log.innerText = "Solicitando permissão da câmera...";
+      startBtn.style.display = "none"; // Esconde o botão ao clicar
 
       try {
-        // Tenta abrir a câmera traseira
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment", // Prioriza a câmera traseira
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
+        let stream;
+        try {
+          // Tenta a câmera traseira
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+          });
+        } catch (e) {
+          // Se falhar a regra traseira, tenta qualquer câmera
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
 
-        videoElement.srcObject = stream;
-        await videoElement.play();
-        statusLog.innerText = "Câmera ativa! Aponta para a sua mão.";
+        video.srcObject = stream;
+        await video.play();
 
-        // Inicia o envio constante de quadros para a inteligência artificial
+        log.innerText = "Câmera ativa! Aponta para a sua mão.";
+
         const processFrame = async () => {
-          if (!videoElement.paused && !videoElement.ended) {
-            await hands.send({ image: videoElement });
+          if (!video.paused && !video.ended) {
+            await hands.send({ image: video });
           }
           requestAnimationFrame(processFrame);
         };
         processFrame();
 
       } catch (err) {
-        console.error(err);
-        statusLog.innerText = "Erro ao abrir câmera: " + err.message;
-        startBtn.style.display = 'block';
+        log.innerText = "Erro ao acessar câmera: " + err.message;
+        startBtn.style.display = "block"; // Reexibe o botão se der erro
+        alert("Não foi possível acessar a câmera: " + err.message);
       }
-    }
-
-    startBtn.addEventListener('click', startCamera);
-  </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual</title>
-  
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-    body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
-    .a-enter-vr { display: none !important; }
-    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
-    a-scene { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
-    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
-    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 50px; cursor: pointer; }
-    #statusLog { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200; color: #1e293b; font-size: 0.9rem; font-weight: 700; background: rgba(255, 255, 255, 0.92); padding: 10px 24px; border-radius: 30px; border: 2px solid #f97316; }
-  </style>
-</head>
-<body>
-
-  <button id="startBtn">🚀 Iniciar AR</button>
-  <div id="statusLog">Clique para iniciar</div>
-  
-  <video id="webcam" playsinline autoplay muted></video>
-  <canvas id="hand_canvas"></canvas>
-
-  <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
-    <a-entity id="main-camera" camera look-controls="enabled: true; magicWindowTrackingEnabled: true" position="0 1.6 0"></a-entity>
-  </a-scene>
-
-  <script>
-    const videoElement = document.getElementById('webcam');
-    const handCanvas = document.getElementById('hand_canvas');
-    const handCtx = handCanvas.getContext('2d');
-    const startBtn = document.getElementById('startBtn');
-    const statusLog = document.getElementById('statusLog');
-
-    function updateCanvasSize() {
-      handCanvas.width = window.innerWidth;
-      handCanvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', updateCanvasSize);
-    updateCanvasSize();
-
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
-
-    hands.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
-
-    hands.onResults((results) => {
-      handCtx.save();
-      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-      if (results.multiHandLandmarks) {
-        for (const landmarks of results.multiHandLandmarks) {
-          drawQuestHandMesh(landmarks);
-        }
-      }
-      handCtx.restore();
-    });
-
-    function drawQuestHandMesh(landmarks) {
-      const screenW = handCanvas.width;
-      const screenH = handCanvas.height;
-      
-      const wrist = landmarks[0];
-      const middleBase = landmarks[9];
-      const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
-      const fingerThickness = Math.max(14, palmSize * 0.18);
-
-      const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
-
-      const fingers = [
-        [0, 1, 2, 3, 4],     // Polegar
-        [0, 5, 6, 7, 8],     // Indicador
-        [0, 9, 10, 11, 12],  // Médio
-        [0, 13, 14, 15, 16], // Anelar
-        [0, 17, 18, 19, 20]  // Mínimo
-      ];
-
-      // A MÁGICA ACONTECE AQUI:
-      // Usamos FILL para criar o volume cinza (corpo)
-      // Definimos o STROKE como TRANSPARENTE para a linha interna sumir
-      handCtx.fillStyle = 'rgba(200, 205, 215, 0.4)'; // Cor cinza da "pele"
-      handCtx.strokeStyle = 'transparent'; // LINHA INTERNA INVISÍVEL
-      handCtx.lineWidth = fingerThickness;
-      handCtx.lineCap = 'round';
-      handCtx.lineJoin = 'round';
-
-      // Desenha os dedos (Volume cinza, sem linha interna)
-      fingers.forEach(finger => {
-        handCtx.beginPath();
-        finger.forEach((idx, i) => {
-          const pos = getPos(idx);
-          if (i === 0) handCtx.moveTo(pos.x, pos.y);
-          else handCtx.lineTo(pos.x, pos.y);
-        });
-        handCtx.stroke(); // A linha está aqui, mas é transparente
-        handCtx.fill();   // O volume está aqui e é visível
-      });
-
-      // Desenha a palma (Volume cinza)
-      const palmIndices = [0, 1, 5, 9, 13, 17];
-      handCtx.beginPath();
-      const startPalm = getPos(palmIndices[0]);
-      handCtx.moveTo(startPalm.x, startPalm.y);
-      for (let i = 1; i < palmIndices.length; i++) {
-        const pos = getPos(palmIndices[i]);
-        handCtx.lineTo(pos.x, pos.y);
-      }
-      handCtx.closePath();
-      handCtx.fill();
-    }
-
-    async function startApp() {
-      startBtn.style.display = 'none';
-      const camera = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({ image: videoElement }); },
-        width: 1280, height: 720, facingMode: 'environment'
-      });
-      await camera.start();
-      statusLog.innerText = "✨ Mão Cinza (Sem linhas internas)";
-    }
-    startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
