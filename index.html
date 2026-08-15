@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Luva 3D - Duas Mãos</title>
+  <title>Luva 3D - Duas Mãos Ajustadas</title>
   
   <style>
     * {
@@ -87,7 +87,7 @@
 
   <div id="ui-container">
     <button id="startBtn">LIGAR CÂMERA</button>
-    <div id="log">Toque para ativar o rastreamento para as DUAS mãos.</div>
+    <div id="log">Toque para ativar as luvas 3D ajustadas nas duas mãos.</div>
   </div>
 
   <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
@@ -115,17 +115,19 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- CRIAÇÃO DE DUAS MÃOS CINZAS 3D ---
+    // --- CRIAÇÃO DE DUAS MÃOS CINZAS 3D (LIGEIRAMENTE AUMENTADAS) ---
     const handMaterial = new THREE.MeshStandardMaterial({
       color: 0x888888,
       roughness: 0.3,
       metalness: 0.5
     });
 
-    const jointGeo = new THREE.SphereGeometry(0.06, 16, 16);
-    const boneGeo = new THREE.CylinderGeometry(0.03, 0.03, 1, 8);
+    // Esferas aumentadas levemente de 0.06 para 0.08
+    const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
+    // Cilindros aumentados levemente de 0.03 para 0.04
+    const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
 
-    // Estrutura para armazenar 2 mãos (índices 0 e 1)
+    // Estrutura para armazenar 2 mãos
     const hands3D = [];
 
     for (let h = 0; h < 2; h++) {
@@ -170,20 +172,19 @@
       return new THREE.Vector3(x, y, z);
     }
 
-    // --- MEDIAPIPE HANDS (CONFIGURADO PARA 2 MÃOS) ---
+    // --- MEDIAPIPE HANDS ---
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
 
     hands.setOptions({
-      maxNumHands: 2, // <--- Agora rastreia até 2 mãos simultaneamente
+      maxNumHands: 2,
       modelComplexity: 1,
       minDetectionConfidence: 0.6,
       minTrackingConfidence: 0.6
     });
 
     hands.onResults((results) => {
-      // Esconde todas as mãos antes do processamento do quadro
       hands3D.forEach(h => {
         h.joints.forEach(j => j.visible = false);
         h.bones.forEach(b => b.visible = false);
@@ -191,7 +192,7 @@
 
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         results.multiHandLandmarks.forEach((landmarks, handIndex) => {
-          if (handIndex >= 2) return; // Limita a 2 mãos
+          if (handIndex >= 2) return;
 
           const h3d = hands3D[handIndex];
 
@@ -244,7 +245,7 @@
           };
         });
 
-        log.innerText = "Câmera Ativa! Coloque as duas mãos na tela.";
+        log.innerText = "Câmera Ativa! Coloque as mãos na tela.";
 
         const processFrame = async () => {
           if (!video.paused && !video.ended) {
