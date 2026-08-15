@@ -2,85 +2,232 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Spatial OS - Janelas AR & Hand Tracking</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rastreamento de Mão - Câmera Visível</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  <!-- Bibliotecas 3D / AR -->
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #f0f0f0; /* Fundo claro inicial */
+      font-family: sans-serif;
+    }
+
+    /* O vídeo fica VISÍVEL e ocupa toda a tela */
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    /* O canvas fica EXATAMENTE por cima do vídeo */
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 2;
+      pointer-events: none; /* Deixa cliques passarem */
+    }
+
+    #startBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      padding: 16px 32px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #fff;
+      background-color: #007bff;
+      border: none;
+      border-radius: 30px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+
+    #statusLog {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ffffff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      font-size: 1rem;
+      font-weight: bold;
+      text-align: center;
+      width: 90%;
+      z-index: 10;
+    }
+  </style>
+
+  <!-- CDNs do MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <button id="startBtn">Ligar Câmera Traseira</button>
   
-  <!-- MediaPipe -->
+  <!-- Elemento de Vídeo para ver a câmera de verdade -->
+  <video id="webcam" playsinline></video>
+  
+  <!-- Canvas para desenhar as linhas da mão por cima -->
+  <canvas id="output_canvas"></canvas>
+  
+  <div id="statusLog">Clique no botão acima para começar</div>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const statusLog = document.getElementById('statusLog');
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults((results) => {
+      // Sincroniza a dimensão interna do canvas com a resolução real do vídeo
+      if (videoElement.videoWidth && videoElement.videoHeight) {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+      }
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // Desenha as articulações e linhas caso identifique mãos
+      if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+          
+          // Desenha as conexões verdes
+          for (const connection of HAND_CONNECTIONS) {
+            const from = landmarks[connection[0]];
+            const to = landmarks[connection[1]];
+            
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(from.x * canvasElement.width, from.y * canvasElement.height);
+            canvasCtx.lineTo(to.x * canvasElement.width, to.y * canvasElement.height);
+            canvasCtx.strokeStyle = '#00FF88';
+            canvasCtx.lineWidth = 5;
+            canvasCtx.stroke();
+          }
+
+          // Desenha os pontos rosa
+          for (const landmark of landmarks) {
+            const x = landmark.x * canvasElement.width;
+            const y = landmark.y * canvasElement.height;
+
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 7, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#FF0055';
+            canvasCtx.fill();
+          }
+        }
+      }
+      canvasCtx.restore();
+    });
+
+    async function startCamera() {
+      startBtn.style.display = 'none';
+      statusLog.innerText = "Iniciando câmera traseira...";
+
+      try {
+        // Tenta abrir a câmera traseira
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment", // Prioriza a câmera traseira
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        videoElement.srcObject = stream;
+        await videoElement.play();
+        statusLog.innerText = "Câmera ativa! Aponta para a sua mão.";
+
+        // Inicia o envio constante de quadros para a inteligência artificial
+        const processFrame = async () => {
+          if (!videoElement.paused && !videoElement.ended) {
+            await hands.send({ image: videoElement });
+          }
+          requestAnimationFrame(processFrame);
+        };
+        processFrame();
+
+      } catch (err) {
+        console.error(err);
+        statusLog.innerText = "Erro ao abrir câmera: " + err.message;
+        startBtn.style.display = 'block';
+      }
+    }
+
+    startBtn.addEventListener('click', startCamera);
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meta Quest Spatial OS - Mão Virtual</title>
+  
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
-    
-    #hand_canvas { 
-      position: absolute; 
-      top: 0; 
-      left: 0; 
-      width: 100vw; 
-      height: 100vh; 
-      z-index: 10; 
-      pointer-events: none; 
-      filter: blur(1.5px); 
-    }
-
-    .a-canvas { z-index: 1; }
-
-    #startBtn { 
-      position: absolute; 
-      top: 50%; 
-      left: 50%; 
-      transform: translate(-50%, -50%); 
-      z-index: 200; 
-      padding: 18px 36px; 
-      font-size: 1.1rem; 
-      font-weight: bold; 
-      color: #ffffff; 
-      background: #f97316; 
-      border: none; 
-      border-radius: 50px; 
-      cursor: pointer; 
-      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.4);
-    }
+    .a-enter-vr { display: none !important; }
+    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
+    a-scene { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
+    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
+    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 50px; cursor: pointer; }
+    #statusLog { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200; color: #1e293b; font-size: 0.9rem; font-weight: 700; background: rgba(255, 255, 255, 0.92); padding: 10px 24px; border-radius: 30px; border: 2px solid #f97316; }
   </style>
 </head>
 <body>
 
-  <button id="startBtn">🚀 Iniciar Interface AR + Mão Virtual</button>
-
+  <button id="startBtn">🚀 Iniciar AR</button>
+  <div id="statusLog">Clique para iniciar</div>
+  
+  <video id="webcam" playsinline autoplay muted></video>
   <canvas id="hand_canvas"></canvas>
 
-  <a-scene 
-    embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
-    vr-mode-ui="enabled: false">
-    
-    <a-marker preset="hiro">
-      <a-entity position="0 0.5 0" rotation="-45 0 0">
-        <a-plane position="0 0.85 0" width="2.2" height="0.2" color="#202124"></a-plane>
-        <a-circle position="-0.95 0.85 0.01" radius="0.03" color="#FF5F56"></a-circle>
-        <a-circle position="-0.85 0.85 0.01" radius="0.03" color="#FFBD2E"></a-circle>
-        <a-circle position="-0.75 0.85 0.01" radius="0.03" color="#27C93F"></a-circle>
-        <a-plane position="0.05 0.85 0.01" width="1.4" height="0.1" color="#35363a"></a-plane>
-        
-        <a-plane position="0 0 0" width="2.2" height="1.5" color="#ffffff" opacity="0.95">
-          <a-text value="Google Chrome AR" color="#000" align="center" position="0 0.4 0.01" scale="0.8 0.8 0.8"></a-text>
-          <a-plane position="0 -0.1 0.01" width="1.8" height="0.6" color="#f1f3f4"></a-plane>
-          <a-text value="Sua Janela Fixa no Espaco 3D" color="#5f6368" align="center" position="0 -0.1 0.02" scale="0.5 0.5 0.5"></a-text>
-        </a-plane>
-      </a-entity>
-    </a-marker>
-
-    <a-entity camera></a-entity>
+  <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
+    <a-entity id="main-camera" camera look-controls="enabled: true; magicWindowTrackingEnabled: true" position="0 1.6 0"></a-entity>
   </a-scene>
 
   <script>
+    const videoElement = document.getElementById('webcam');
     const handCanvas = document.getElementById('hand_canvas');
     const handCtx = handCanvas.getContext('2d');
     const startBtn = document.getElementById('startBtn');
+    const statusLog = document.getElementById('statusLog');
 
     function updateCanvasSize() {
       handCanvas.width = window.innerWidth;
@@ -89,24 +236,26 @@
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
-    const hands = new Hands({ 
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` 
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
-    
-    hands.setOptions({ 
-      maxNumHands: 2, 
-      modelComplexity: 1, 
-      minDetectionConfidence: 0.7, 
-      minTrackingConfidence: 0.7 
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
     });
 
     hands.onResults((results) => {
+      handCtx.save();
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
           drawQuestHandMesh(landmarks);
         }
       }
+      handCtx.restore();
     });
 
     function drawQuestHandMesh(landmarks) {
@@ -116,28 +265,41 @@
       const wrist = landmarks[0];
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
-      
-      const fingerThickness = Math.max(20, palmSize * 0.24); 
+      const fingerThickness = Math.max(14, palmSize * 0.18);
+
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
+      const fingers = [
+        [0, 1, 2, 3, 4],     // Polegar
+        [0, 5, 6, 7, 8],     // Indicador
+        [0, 9, 10, 11, 12],  // Médio
+        [0, 13, 14, 15, 16], // Anelar
+        [0, 17, 18, 19, 20]  // Mínimo
+      ];
+
+      // A MÁGICA ACONTECE AQUI:
+      // Usamos FILL para criar o volume cinza (corpo)
+      // Definimos o STROKE como TRANSPARENTE para a linha interna sumir
+      handCtx.fillStyle = 'rgba(200, 205, 215, 0.4)'; // Cor cinza da "pele"
+      handCtx.strokeStyle = 'transparent'; // LINHA INTERNA INVISÍVEL
+      handCtx.lineWidth = fingerThickness;
       handCtx.lineCap = 'round';
       handCtx.lineJoin = 'round';
 
-      const fingers = [
-        [0, 1, 2, 3, 4],     
-        [0, 5, 6, 7, 8],     
-        [0, 9, 10, 11, 12],  
-        [0, 13, 14, 15, 16], 
-        [0, 17, 18, 19, 20]  
-      ];
+      // Desenha os dedos (Volume cinza, sem linha interna)
+      fingers.forEach(finger => {
+        handCtx.beginPath();
+        finger.forEach((idx, i) => {
+          const pos = getPos(idx);
+          if (i === 0) handCtx.moveTo(pos.x, pos.y);
+          else handCtx.lineTo(pos.x, pos.y);
+        });
+        handCtx.stroke(); // A linha está aqui, mas é transparente
+        handCtx.fill();   // O volume está aqui e é visível
+      });
 
-      const skinColor = 'rgba(120, 120, 125, 0.75)';
-
-      handCtx.fillStyle = skinColor;
-      handCtx.strokeStyle = skinColor;
-      handCtx.lineWidth = fingerThickness;
-
-      const palmIndices = [0, 1, 2, 5, 9, 13, 17, 18];
+      // Desenha a palma (Volume cinza)
+      const palmIndices = [0, 1, 5, 9, 13, 17];
       handCtx.beginPath();
       const startPalm = getPos(palmIndices[0]);
       handCtx.moveTo(startPalm.x, startPalm.y);
@@ -147,37 +309,18 @@
       }
       handCtx.closePath();
       handCtx.fill();
-
-      fingers.forEach(finger => {
-        handCtx.beginPath();
-        finger.forEach((idx, i) => {
-          const pos = getPos(idx);
-          if (i === 0) handCtx.moveTo(pos.x, pos.y);
-          else handCtx.lineTo(pos.x, pos.y);
-        });
-        handCtx.stroke();
-      });
     }
 
-    // Inicialização sem duplicar a câmera
-    startBtn.addEventListener('click', () => {
+    async function startApp() {
       startBtn.style.display = 'none';
-      
-      // Aguarda o AR.js criar a tag de vídeo da câmera para usá-la no MediaPipe
-      const checkVideo = setInterval(() => {
-        const arVideo = document.querySelector('video');
-        if (arVideo && arVideo.readyState === 4) {
-          clearInterval(checkVideo);
-          
-          // Loop contínuo usando o vídeo do próprio AR.js
-          async function processFrame() {
-            await hands.send({ image: arVideo });
-            requestAnimationFrame(processFrame);
-          }
-          processFrame();
-        }
-      }, 300);
-    });
+      const camera = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({ image: videoElement }); },
+        width: 1280, height: 720, facingMode: 'environment'
+      });
+      await camera.start();
+      statusLog.innerText = "✨ Mão Cinza (Sem linhas internas)";
+    }
+    startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
