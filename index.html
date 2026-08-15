@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual</title>
+  <title>Meta Quest Spatial OS - Mão Virtual (Volume Cinza)</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -71,13 +71,19 @@
     function drawQuestHandMesh(landmarks) {
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
-      
+
       const wrist = landmarks[0];
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
+      
+      // Espessura do dedo
       const fingerThickness = Math.max(14, palmSize * 0.18);
 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
+
+      // Configuração para ficar "redondinho"
+      handCtx.lineCap = 'round';
+      handCtx.lineJoin = 'round';
 
       const fingers = [
         [0, 1, 2, 3, 4],     // Polegar
@@ -87,16 +93,16 @@
         [0, 17, 18, 19, 20]  // Mínimo
       ];
 
-      // A MÁGICA ACONTECE AQUI:
-      // Usamos FILL para criar o volume cinza (corpo)
-      // Definimos o STROKE como TRANSPARENTE para a linha interna sumir
-      handCtx.fillStyle = 'rgba(200, 205, 215, 0.4)'; // Cor cinza da "pele"
-      handCtx.strokeStyle = 'transparent'; // LINHA INTERNA INVISÍVEL
-      handCtx.lineWidth = fingerThickness;
-      handCtx.lineCap = 'round';
-      handCtx.lineJoin = 'round';
+      // A COR DA "PELE" (Cinza com transparência)
+      const skinColor = 'rgba(200, 205, 215, 0.45)';
 
-      // Desenha os dedos (Volume cinza, sem linha interna)
+      // DESENHO: Usamos a mesma cor para o STROKE (contorno) e FILL (preenchimento)
+      // Assim, a linha "desaparece" dentro do volume da cor
+      handCtx.fillStyle = skinColor;
+      handCtx.strokeStyle = skinColor; 
+      handCtx.lineWidth = fingerThickness;
+
+      // Desenha os dedos (Volume cinza, sem linha interna visível)
       fingers.forEach(finger => {
         handCtx.beginPath();
         finger.forEach((idx, i) => {
@@ -104,11 +110,10 @@
           if (i === 0) handCtx.moveTo(pos.x, pos.y);
           else handCtx.lineTo(pos.x, pos.y);
         });
-        handCtx.stroke(); // A linha está aqui, mas é transparente
-        handCtx.fill();   // O volume está aqui e é visível
+        handCtx.stroke(); // Desenha o contorno com a mesma cor da pele
       });
 
-      // Desenha a palma (Volume cinza)
+      // Desenha a palma da mão (Volume cinza)
       const palmIndices = [0, 1, 5, 9, 13, 17];
       handCtx.beginPath();
       const startPalm = getPos(palmIndices[0]);
@@ -128,7 +133,7 @@
         width: 1280, height: 720, facingMode: 'environment'
       });
       await camera.start();
-      statusLog.innerText = "✨ Mão Cinza (Sem linhas internas)";
+      statusLog.innerText = "✨ Mão Cinza (Volume Redondo)";
     }
     startBtn.addEventListener('click', startApp);
   </script>
