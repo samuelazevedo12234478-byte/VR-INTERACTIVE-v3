@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual Sem Imperfeições</title>
+  <title>Meta Quest Spatial OS - Mão Virtual Ajustada</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -43,7 +43,7 @@
       height: 100vh; 
       z-index: 20; 
       pointer-events: none; 
-      filter: blur(1.5px); /* Suaviza as dobras e elimina riscos ao fechar a mão */
+      filter: blur(1.5px); 
     }
 
     #startBtn { 
@@ -111,7 +111,6 @@
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
       
-      // Espessura com o tamanho ajustado
       const fingerThickness = Math.max(25, palmSize * 0.29); 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
@@ -126,7 +125,8 @@
         [0, 17, 18, 19, 20]  
       ];
 
-      const skinColor = 'rgba(200, 205, 215, 0.5)';
+      // Opacidade ajustada para 0.75
+      const skinColor = 'rgba(200, 205, 215, 0.75)';
 
       handCtx.fillStyle = skinColor;
       handCtx.strokeStyle = skinColor;
@@ -144,7 +144,7 @@
       handCtx.closePath();
       handCtx.fill();
 
-      // 2. Preenchimento dos Dedos sem risco interno
+      // 2. Preenchimento dos Dedos
       fingers.forEach(finger => {
         handCtx.beginPath();
         finger.forEach((idx, i) => {
@@ -162,7 +162,7 @@
         onFrame: async () => { await hands.send({ image: videoElement }); },
         width: 1280, 
         height: 720, 
-        facingMode: 'environment' // Câmera traseira
+        facingMode: 'environment'
       });
       await camera.start();
     }
@@ -171,3 +171,4 @@
   </script>
 </body>
 </html>
+
