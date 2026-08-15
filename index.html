@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual (Contorno)</title>
+  <title>Meta Quest Spatial OS - Mão Virtual</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -147,50 +147,75 @@
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
 
-      // Perímetro externo da mão conectando o contorno dos dedos e palma
-      const PERIMETER_INDICES = [
-        0, 1, 2, 3, 4,          // Polegar
-        3, 2, 5, 6, 7, 8,       // Indicador
-        7, 6, 9, 10, 11, 12,    // Médio
-        11, 10, 13, 14, 15, 16, // Anelar
-        15, 14, 17, 18, 19, 20, // Mínimo
-        17, 0                   // Lateral do pulso
+      // Cálculo de escala da mão com base na distância
+      const wrist = landmarks[0];
+      const middleBase = landmarks[9];
+      const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
+      
+      // Espessura adaptativa para criar a "pele" arredondada do dedo
+      const fingerThickness = Math.max(14, palmSize * 0.18);
+
+      const getPos = (idx) => ({
+        x: landmarks[idx].x * screenW,
+        y: landmarks[idx].y * screenH
+      });
+
+      // Arredonda todas as conexões para sumir com as quinas secas
+      handCtx.lineCap = 'round';
+      handCtx.lineJoin = 'round';
+
+      const fingers = [
+        [0, 1, 2, 3, 4],     // Polegar
+        [0, 5, 6, 7, 8],     // Indicador
+        [0, 9, 10, 11, 12],  // Médio
+        [0, 13, 14, 15, 16], // Anelar
+        [0, 17, 18, 19, 20]  // Mínimo
       ];
 
-      // Desenha a malha contínua
+      // PASSO 1: Preenchimento do corpo dos dedos (Massa cinza translúcida)
+      handCtx.strokeStyle = 'rgba(200, 205, 215, 0.35)';
+      handCtx.lineWidth = fingerThickness;
+
+      fingers.forEach(finger => {
+        handCtx.beginPath();
+        finger.forEach((idx, i) => {
+          const pos = getPos(idx);
+          if (i === 0) handCtx.moveTo(pos.x, pos.y);
+          else handCtx.lineTo(pos.x, pos.y);
+        });
+        handCtx.stroke();
+      });
+
+      // PASSO 2: Preenchimento da palma da mão
+      const palmIndices = [0, 1, 5, 9, 13, 17];
       handCtx.beginPath();
-      const startPt = landmarks[PERIMETER_INDICES[0]];
-      handCtx.moveTo(startPt.x * screenW, startPt.y * screenH);
-
-      for (let i = 1; i < PERIMETER_INDICES.length; i++) {
-        const pt = landmarks[PERIMETER_INDICES[i]];
-        handCtx.lineTo(pt.x * screenW, pt.y * screenH);
+      const startPalm = getPos(palmIndices[0]);
+      handCtx.moveTo(startPalm.x, startPalm.y);
+      for (let i = 1; i < palmIndices.length; i++) {
+        const pos = getPos(palmIndices[i]);
+        handCtx.lineTo(pos.x, pos.y);
       }
-
       handCtx.closePath();
-
-      // Preenchimento com cinza transparente
-      handCtx.fillStyle = 'rgba(180, 185, 200, 0.35)';
+      handCtx.fillStyle = 'rgba(200, 205, 215, 0.35)';
       handCtx.fill();
 
-      // Borda branca brilhante estilo Quest
+      // PASSO 3: Borda branca brilhante (Efeito Meta Quest)
       handCtx.strokeStyle = '#ffffff';
-      handCtx.lineWidth = 3;
+      handCtx.lineWidth = Math.max(3, fingerThickness * 0.15);
       handCtx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-      handCtx.shadowBlur = 10;
-      handCtx.stroke();
+      handCtx.shadowBlur = 8;
 
-      handCtx.shadowBlur = 0;
-
-      // Pequenos pontos de tracking nas pontas dos dedos
-      const FINGERTIPS = [4, 8, 12, 16, 20];
-      for (const idx of FINGERTIPS) {
-        const tip = landmarks[idx];
+      fingers.forEach(finger => {
         handCtx.beginPath();
-        handCtx.arc(tip.x * screenW, tip.y * screenH, 4, 0, 2 * Math.PI);
-        handCtx.fillStyle = '#ffffff';
-        handCtx.fill();
-      }
+        finger.forEach((idx, i) => {
+          const pos = getPos(idx);
+          if (i === 0) handCtx.moveTo(pos.x, pos.y);
+          else handCtx.lineTo(pos.x, pos.y);
+        });
+        handCtx.stroke();
+      });
+
+      handCtx.shadowBlur = 0; // Desativa o brilho para outros elementos
     }
 
     async function startApp() {
@@ -211,7 +236,7 @@
 
       try {
         await camera.start();
-        statusLog.innerText = "✨ Rastreamento Meta Quest (Contorno Virtual)";
+        statusLog.innerText = "✨ Rastreamento Meta Quest (Mão Virtual)";
       } catch (err) {
         statusLog.innerText = "⚠️ Erro ao abrir a câmera.";
       }
