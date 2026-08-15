@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual (Sem Esqueleto)</title>
+  <title>Meta Quest Spatial OS - Mão Virtual</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -58,47 +58,67 @@
     });
 
     hands.onResults((results) => {
+      handCtx.save();
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
-          drawQuestHand(landmarks);
+          drawQuestHandMesh(landmarks);
         }
       }
+      handCtx.restore();
     });
 
-    function drawQuestHand(landmarks) {
+    function drawQuestHandMesh(landmarks) {
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
-
-      // Sequência que desenha o contorno da mão (Dedo a dedo)
-      // Vai do pulso -> polegar -> pontas dos dedos -> pulso
-      const outline = [0, 1, 2, 3, 4, 3, 2, 5, 8, 7, 6, 5, 9, 12, 11, 10, 9, 13, 16, 15, 14, 13, 17, 20, 19, 18, 17, 0];
-
-      handCtx.beginPath();
       
-      outline.forEach((idx, i) => {
-        const pt = landmarks[idx];
-        const x = pt.x * screenW;
-        const y = pt.y * screenH;
-        if (i === 0) handCtx.moveTo(x, y);
-        else handCtx.lineTo(x, y);
+      const wrist = landmarks[0];
+      const middleBase = landmarks[9];
+      const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
+      const fingerThickness = Math.max(14, palmSize * 0.18);
+
+      const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
+
+      const fingers = [
+        [0, 1, 2, 3, 4],     // Polegar
+        [0, 5, 6, 7, 8],     // Indicador
+        [0, 9, 10, 11, 12],  // Médio
+        [0, 13, 14, 15, 16], // Anelar
+        [0, 17, 18, 19, 20]  // Mínimo
+      ];
+
+      // A MÁGICA ACONTECE AQUI:
+      // Usamos FILL para criar o volume cinza (corpo)
+      // Definimos o STROKE como TRANSPARENTE para a linha interna sumir
+      handCtx.fillStyle = 'rgba(200, 205, 215, 0.4)'; // Cor cinza da "pele"
+      handCtx.strokeStyle = 'transparent'; // LINHA INTERNA INVISÍVEL
+      handCtx.lineWidth = fingerThickness;
+      handCtx.lineCap = 'round';
+      handCtx.lineJoin = 'round';
+
+      // Desenha os dedos (Volume cinza, sem linha interna)
+      fingers.forEach(finger => {
+        handCtx.beginPath();
+        finger.forEach((idx, i) => {
+          const pos = getPos(idx);
+          if (i === 0) handCtx.moveTo(pos.x, pos.y);
+          else handCtx.lineTo(pos.x, pos.y);
+        });
+        handCtx.stroke(); // A linha está aqui, mas é transparente
+        handCtx.fill();   // O volume está aqui e é visível
       });
 
+      // Desenha a palma (Volume cinza)
+      const palmIndices = [0, 1, 5, 9, 13, 17];
+      handCtx.beginPath();
+      const startPalm = getPos(palmIndices[0]);
+      handCtx.moveTo(startPalm.x, startPalm.y);
+      for (let i = 1; i < palmIndices.length; i++) {
+        const pos = getPos(palmIndices[i]);
+        handCtx.lineTo(pos.x, pos.y);
+      }
       handCtx.closePath();
-
-      // Preenchimento transparente
-      handCtx.fillStyle = 'rgba(255, 255, 255, 0.2)';
       handCtx.fill();
-
-      // Borda brilhante externa
-      handCtx.strokeStyle = '#ffffff';
-      handCtx.lineWidth = 4;
-      handCtx.lineJoin = 'round';
-      handCtx.shadowColor = '#ffffff';
-      handCtx.shadowBlur = 10;
-      handCtx.stroke();
-      
-      handCtx.shadowBlur = 0;
     }
 
     async function startApp() {
@@ -108,11 +128,9 @@
         width: 1280, height: 720, facingMode: 'environment'
       });
       await camera.start();
-      statusLog.innerText = "✨ Modo Quest (Contorno Ativo)";
+      statusLog.innerText = "✨ Mão Cinza (Sem linhas internas)";
     }
-
     startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
-
