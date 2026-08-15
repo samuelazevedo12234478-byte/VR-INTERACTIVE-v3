@@ -2,49 +2,35 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual Ajustada</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Spatial OS - Janelas AR & Hand Tracking</title>
+
+  <!-- Bibliotecas do A-Frame e AR.js para Realidade Aumentada e 3D -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <!-- MediaPipe para o rastreamento da mão -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
   <style>
-    * { 
-      box-sizing: border-box; 
-      margin: 0; 
-      padding: 0; 
-      user-select: none; 
-    }
-
-    body, html { 
-      width: 100vw; 
-      height: 100vh; 
-      overflow: hidden; 
-      background: #000; 
-      font-family: sans-serif; 
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
     
-    #webcam { 
-      position: absolute; 
-      top: 0; 
-      left: 0; 
-      width: 100vw; 
-      height: 100vh; 
-      object-fit: cover; 
-      z-index: 0; 
-    }
-
+    /* Overlay para o Canvas da Mão sobre o A-Frame */
     #hand_canvas { 
       position: absolute; 
       top: 0; 
       left: 0; 
       width: 100vw; 
       height: 100vh; 
-      z-index: 20; 
+      z-index: 10; 
       pointer-events: none; 
       filter: blur(1.5px); 
     }
+
+    /* O A-frame gera a câmera de fundo automaticamente */
+    .a-canvas { z-index: 1; }
 
     #startBtn { 
       position: absolute; 
@@ -66,12 +52,55 @@
 </head>
 <body>
 
-  <button id="startBtn">🚀 Iniciar Mão Virtual Ajustada</button>
-  <video id="webcam" playsinline autoplay muted></video>
+  <button id="startBtn">🚀 Iniciar Interface AR + Mão Virtual</button>
+
+  <!-- Canvas onde desenhamos a mão cinza -->
   <canvas id="hand_canvas"></canvas>
 
+  <!-- Cena A-Frame com suporte a AR (Ancoragem por Marcador 3D) -->
+  <a-scene 
+    embedded 
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
+    vr-mode-ui="enabled: false">
+    
+    <!-- Ancoragem Espacial: Quando a câmera detecta o marcador, fixa a janela aqui -->
+    <a-marker preset="hiro">
+      
+      <!-- Janela do Navegador Virtual 1 -->
+      <a-entity position="0 0.5 0" rotation="-45 0 0">
+        <!-- Moldura Superior da Janela (Barra do Chrome) -->
+        <a-plane position="0 0.85 0" width="2.2" height="0.2" color="#202124" radius="0.02"></a-plane>
+        <!-- Botões Fechar/Minimizar -->
+        <a-circle position="-0.95 0.85 0.01" radius="0.03" color="#FF5F56"></a-circle>
+        <a-circle position="-0.85 0.85 0.01" radius="0.03" color="#FFBD2E"></a-circle>
+        <a-circle position="-0.75 0.85 0.01" radius="0.03" color="#27C93F"></a-circle>
+        <!-- Barra de Endereço URL -->
+        <a-plane position="0.05 0.85 0.01" width="1.4" height="0.1" color="#35363a"></a-plane>
+        
+        <!-- Tela Principal da Janela -->
+        <a-plane position="0 0 0" width="2.2" height="1.5" color="#ffffff" opacity="0.95">
+          <!-- Conteúdo Simulado do Navegador -->
+          <a-text value="Google Chrome AR" color="#000" align="center" position="0 0.4 0.01" scale="0.8 0.8 0.8"></a-text>
+          <a-plane position="0 -0.1 0.01" width="1.8" height="0.6" color="#f1f3f4"></a-plane>
+          <a-text value="Sua Janela Fixa no Espaco 3D" color="#5f6368" align="center" position="0 -0.1 0.02" scale="0.5 0.5 0.5"></a-text>
+        </a-plane>
+      </a-entity>
+
+      <!-- Janela Secundária Virtual do Lado -->
+      <a-entity position="2.5 0.5 -0.3" rotation="-45 -20 0">
+        <a-plane position="0 0.85 0" width="1.8" height="0.2" color="#202124"></a-plane>
+        <a-plane position="0 0 0" width="1.8" height="1.5" color="#111827" opacity="0.9">
+          <a-text value="Spatial Dashboard" color="#60A5FA" align="center" position="0 0.4 0.01" scale="0.7 0.7 0.7"></a-text>
+        </a-plane>
+      </a-entity>
+
+    </a-marker>
+
+    <!-- Câmera AR com Sensores de Orientação e Movimento -->
+    <a-entity camera></a-entity>
+  </a-scene>
+
   <script>
-    const videoElement = document.getElementById('webcam');
     const handCanvas = document.getElementById('hand_canvas');
     const handCtx = handCanvas.getContext('2d');
     const startBtn = document.getElementById('startBtn');
@@ -83,6 +112,7 @@
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
+    // Rastreamento da Mão com MediaPipe
     const hands = new Hands({ 
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` 
     });
@@ -111,7 +141,6 @@
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
       
-      // Espessura reduzida (de 25/0.29 para 20/0.24) para diminuir o volume geral da mão
       const fingerThickness = Math.max(20, palmSize * 0.24); 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
@@ -126,14 +155,13 @@
         [0, 17, 18, 19, 20]  
       ];
 
-      // Cinza neutro com opacidade 0.75
       const skinColor = 'rgba(120, 120, 125, 0.75)';
 
       handCtx.fillStyle = skinColor;
       handCtx.strokeStyle = skinColor;
       handCtx.lineWidth = fingerThickness;
 
-      // 1. Preenchimento da Palma da Mão
+      // Desenho da Palma
       const palmIndices = [0, 1, 2, 5, 9, 13, 17, 18];
       handCtx.beginPath();
       const startPalm = getPos(palmIndices[0]);
@@ -145,7 +173,7 @@
       handCtx.closePath();
       handCtx.fill();
 
-      // 2. Preenchimento dos Dedos
+      // Desenho dos Dedos
       fingers.forEach(finger => {
         handCtx.beginPath();
         finger.forEach((idx, i) => {
@@ -157,18 +185,21 @@
       });
     }
 
-    async function startApp() {
+    // Inicialização ao clicar no botão
+    startBtn.addEventListener('click', () => {
       startBtn.style.display = 'none';
-      const camera = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({ image: videoElement }); },
-        width: 1280, 
-        height: 720, 
-        facingMode: 'environment'
-      });
-      await camera.start();
-    }
-    
-    startBtn.addEventListener('click', startApp);
+      
+      // Conecta a câmera do AR.js ao rastreador de mãos do MediaPipe
+      const videoElement = document.querySelector('video');
+      if (videoElement) {
+        const camera = new Camera(videoElement, {
+          onFrame: async () => { await hands.send({ image: videoElement }); },
+          width: 1280, 
+          height: 720
+        });
+        camera.start();
+      }
+    });
   </script>
 </body>
 </html>
