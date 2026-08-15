@@ -3,19 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual (Ajustada)</title>
+  <title>Meta Quest Spatial OS - Mão Virtual Sem Imperfeições</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-    body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
-    /* Mantive o espelhamento para o movimento ficar natural */
-    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; transform: scaleX(-1); }
-    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); }
-    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: #f97316; border: none; border-radius: 50px; cursor: pointer; }
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      user-select: none; 
+    }
+
+    body, html { 
+      width: 100vw; 
+      height: 100vh; 
+      overflow: hidden; 
+      background: #000; 
+      font-family: sans-serif; 
+    }
+    
+    #webcam { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      width: 100vw; 
+      height: 100vh; 
+      object-fit: cover; 
+      z-index: 0; 
+    }
+
+    #hand_canvas { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      width: 100vw; 
+      height: 100vh; 
+      z-index: 20; 
+      pointer-events: none; 
+      filter: blur(1.5px); /* Suaviza as dobras e elimina riscos ao fechar a mão */
+    }
+
+    #startBtn { 
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      z-index: 200; 
+      padding: 18px 36px; 
+      font-size: 1.1rem; 
+      font-weight: bold; 
+      color: #ffffff; 
+      background: #f97316; 
+      border: none; 
+      border-radius: 50px; 
+      cursor: pointer; 
+      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -37,8 +83,16 @@
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
-    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+    const hands = new Hands({ 
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` 
+    });
+    
+    hands.setOptions({ 
+      maxNumHands: 2, 
+      modelComplexity: 1, 
+      minDetectionConfidence: 0.7, 
+      minTrackingConfidence: 0.7 
+    });
 
     hands.onResults((results) => {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
@@ -53,20 +107,17 @@
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
       
-      // Cálculo para escala e alinhamento
       const wrist = landmarks[0];
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
       
-      // Aumentei um pouco mais a espessura para cobrir melhor os dedos reais
-      const fingerThickness = Math.max(28, palmSize * 0.32); 
-
+      // Espessura com o tamanho ajustado
+      const fingerThickness = Math.max(25, palmSize * 0.29); 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
       handCtx.lineCap = 'round';
       handCtx.lineJoin = 'round';
 
-      // Dedos (Aumentado para incluir a base para não ficar "buraco" na palma)
       const fingers = [
         [0, 1, 2, 3, 4],     
         [0, 5, 6, 7, 8],     
@@ -75,26 +126,14 @@
         [0, 17, 18, 19, 20]  
       ];
 
-      const skinColor = 'rgba(200, 205, 215, 0.5)'; // Cor da pele cinza
+      const skinColor = 'rgba(200, 205, 215, 0.5)';
 
       handCtx.fillStyle = skinColor;
       handCtx.strokeStyle = skinColor;
       handCtx.lineWidth = fingerThickness;
 
-      // Desenha os dedos (Volume cinza)
-      fingers.forEach(finger => {
-        handCtx.beginPath();
-        finger.forEach((idx, i) => {
-          const pos = getPos(idx);
-          if (i === 0) handCtx.moveTo(pos.x, pos.y);
-          else handCtx.lineTo(pos.x, pos.y);
-        });
-        handCtx.stroke();
-        handCtx.fill(); 
-      });
-
-      // AUMENTA A PALMA: Adicionei mais pontos de contorno para a mão parecer mais "cheia" e menos torta
-      const palmIndices = [0, 1, 2, 5, 9, 13, 17, 18, 0];
+      // 1. Preenchimento da Palma da Mão
+      const palmIndices = [0, 1, 2, 5, 9, 13, 17, 18];
       handCtx.beginPath();
       const startPalm = getPos(palmIndices[0]);
       handCtx.moveTo(startPalm.x, startPalm.y);
@@ -104,18 +143,31 @@
       }
       handCtx.closePath();
       handCtx.fill();
+
+      // 2. Preenchimento dos Dedos sem risco interno
+      fingers.forEach(finger => {
+        handCtx.beginPath();
+        finger.forEach((idx, i) => {
+          const pos = getPos(idx);
+          if (i === 0) handCtx.moveTo(pos.x, pos.y);
+          else handCtx.lineTo(pos.x, pos.y);
+        });
+        handCtx.stroke();
+      });
     }
 
     async function startApp() {
       startBtn.style.display = 'none';
       const camera = new Camera(videoElement, {
         onFrame: async () => { await hands.send({ image: videoElement }); },
-        width: 1280, height: 720, facingMode: 'user' 
+        width: 1280, 
+        height: 720, 
+        facingMode: 'environment' // Câmera traseira
       });
       await camera.start();
     }
+    
     startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
-
