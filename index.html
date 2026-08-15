@@ -111,7 +111,8 @@
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
       
-      const fingerThickness = Math.max(25, palmSize * 0.29); 
+      // Espessura reduzida (de 25/0.29 para 20/0.24) para diminuir o volume geral da mão
+      const fingerThickness = Math.max(20, palmSize * 0.24); 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
       handCtx.lineCap = 'round';
@@ -125,8 +126,8 @@
         [0, 17, 18, 19, 20]  
       ];
 
-      // Opacidade ajustada para 0.75
-      const skinColor = 'rgba(200, 205, 215, 0.75)';
+      // Cinza neutro com opacidade 0.75
+      const skinColor = 'rgba(120, 120, 125, 0.75)';
 
       handCtx.fillStyle = skinColor;
       handCtx.strokeStyle = skinColor;
@@ -171,4 +172,3 @@
   </script>
 </body>
 </html>
-
