@@ -3,98 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual (Sem Linhas)</title>
+  <title>Meta Quest Spatial OS - Mão Virtual (Sem Esqueleto)</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
-
-    body, html {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background: #000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
     .a-enter-vr { display: none !important; }
-
-    #webcam {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 0;
-    }
-
-    a-scene {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 10;
-    }
-
-    #hand_canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 20;
-      pointer-events: none;
-    }
-
-    #startBtn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 200;
-      padding: 18px 36px;
-      font-size: 1.1rem;
-      font-weight: bold;
-      color: #ffffff;
-      background: linear-gradient(135deg, #f97316, #ea580c);
-      border: none;
-      border-radius: 50px;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(234, 88, 12, 0.4);
-      transition: all 0.2s ease;
-    }
-
-    #statusLog {
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 200;
-      color: #1e293b;
-      font-size: 0.9rem;
-      font-weight: 700;
-      background: rgba(255, 255, 255, 0.92);
-      padding: 10px 24px;
-      border-radius: 30px;
-      border: 2px solid #f97316;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-      white-space: nowrap;
-    }
+    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
+    a-scene { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
+    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
+    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 50px; cursor: pointer; }
+    #statusLog { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200; color: #1e293b; font-size: 0.9rem; font-weight: 700; background: rgba(255, 255, 255, 0.92); padding: 10px 24px; border-radius: 30px; border: 2px solid #f97316; }
   </style>
 </head>
 <body>
 
-  <button id="startBtn">🚀 Iniciar AR (Modo Meta Quest)</button>
+  <button id="startBtn">🚀 Iniciar AR</button>
   <div id="statusLog">Clique para iniciar</div>
   
   <video id="webcam" playsinline autoplay muted></video>
@@ -108,7 +36,6 @@
     const videoElement = document.getElementById('webcam');
     const handCanvas = document.getElementById('hand_canvas');
     const handCtx = handCanvas.getContext('2d');
-    
     const startBtn = document.getElementById('startBtn');
     const statusLog = document.getElementById('statusLog');
 
@@ -131,111 +58,61 @@
     });
 
     hands.onResults((results) => {
-      handCtx.save();
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
-          drawQuestHandMesh(landmarks);
+          drawQuestHand(landmarks);
         }
       }
-
-      handCtx.restore();
     });
 
-    // Algoritmo de Graham Scan para encontrar o contorno externo sem linhas internas
-    function getConvexHull(points) {
-      points.sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
-
-      const crossProduct = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
-      const lower = [];
-      for (const p of points) {
-        while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
-          lower.pop();
-        }
-        lower.push(p);
-      }
-
-      const upper = [];
-      for (let i = points.length - 1; i >= 0; i--) {
-        const p = points[i];
-        while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
-          upper.pop();
-        }
-        upper.push(p);
-      }
-
-      upper.pop();
-      lower.pop();
-      return lower.concat(upper);
-    }
-
-    function drawQuestHandMesh(landmarks) {
+    function drawQuestHand(landmarks) {
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
 
-      // Converte todos os pontos para coordenadas da tela
-      const points = landmarks.map(pt => ({
-        x: pt.x * screenW,
-        y: pt.y * screenH
-      }));
+      // Sequência que desenha o contorno da mão (Dedo a dedo)
+      // Vai do pulso -> polegar -> pontas dos dedos -> pulso
+      const outline = [0, 1, 2, 3, 4, 3, 2, 5, 8, 7, 6, 5, 9, 12, 11, 10, 9, 13, 16, 15, 14, 13, 17, 20, 19, 18, 17, 0];
 
-      // Calcula apenas a borda externa da mão
-      const hull = getConvexHull(points);
-
-      if (hull.length < 3) return;
-
-      handCtx.lineJoin = 'round';
-      handCtx.lineCap = 'round';
-
-      // 1. Cria a forma preenchida única
       handCtx.beginPath();
-      handCtx.moveTo(hull[0].x, hull[0].y);
-      for (let i = 1; i < hull.length; i++) {
-        handCtx.lineTo(hull[i].x, hull[i].y);
-      }
+      
+      outline.forEach((idx, i) => {
+        const pt = landmarks[idx];
+        const x = pt.x * screenW;
+        const y = pt.y * screenH;
+        if (i === 0) handCtx.moveTo(x, y);
+        else handCtx.lineTo(x, y);
+      });
+
       handCtx.closePath();
 
-      // Preenchimento em cinza transparente (sem divisões internas)
-      handCtx.fillStyle = 'rgba(200, 205, 215, 0.35)';
+      // Preenchimento transparente
+      handCtx.fillStyle = 'rgba(255, 255, 255, 0.2)';
       handCtx.fill();
 
-      // 2. Apenas o contorno branco externo brilhante
+      // Borda brilhante externa
       handCtx.strokeStyle = '#ffffff';
       handCtx.lineWidth = 4;
-      handCtx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      handCtx.lineJoin = 'round';
+      handCtx.shadowColor = '#ffffff';
       handCtx.shadowBlur = 10;
       handCtx.stroke();
-
+      
       handCtx.shadowBlur = 0;
     }
 
     async function startApp() {
       startBtn.style.display = 'none';
-
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try { await DeviceOrientationEvent.requestPermission(); } catch(e) {}
-      }
-
       const camera = new Camera(videoElement, {
-        onFrame: async () => {
-          await hands.send({ image: videoElement });
-        },
-        width: 1280,
-        height: 720,
-        facingMode: 'environment'
+        onFrame: async () => { await hands.send({ image: videoElement }); },
+        width: 1280, height: 720, facingMode: 'environment'
       });
-
-      try {
-        await camera.start();
-        statusLog.innerText = "✨ Rastreamento Meta Quest (Silhueta Limpa)";
-      } catch (err) {
-        statusLog.innerText = "⚠️ Erro ao abrir a câmera.";
-      }
+      await camera.start();
+      statusLog.innerText = "✨ Modo Quest (Contorno Ativo)";
     }
 
     startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
+
