@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Luva 3D sobre a Mão Real</title>
+  <title>Luva 3D - Duas Mãos</title>
   
   <style>
     * {
@@ -20,7 +20,6 @@
       font-family: Arial, sans-serif;
     }
 
-    /* Vídeo da Câmera ao Fundo */
     #webcam {
       position: absolute;
       top: 0;
@@ -29,9 +28,9 @@
       height: 100vh;
       object-fit: cover;
       z-index: 1;
+      display: block;
     }
 
-    /* Canvas 3D por cima do vídeo */
     #canvas3d {
       position: absolute;
       top: 0;
@@ -42,7 +41,6 @@
       pointer-events: none;
     }
 
-    /* Interface do Botão de Início */
     #ui-container {
       position: fixed;
       top: 20px;
@@ -70,7 +68,7 @@
     }
 
     #log {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.85);
       color: #00ff88;
       padding: 8px 16px;
       border-radius: 20px;
@@ -80,6 +78,7 @@
     }
   </style>
 
+  <!-- CDNs: Three.js e MediaPipe -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -88,10 +87,10 @@
 
   <div id="ui-container">
     <button id="startBtn">LIGAR CÂMERA</button>
-    <div id="log">Toque para alinhar a luva 3D à sua mão.</div>
+    <div id="log">Toque para ativar o rastreamento para as DUAS mãos.</div>
   </div>
 
-  <video id="webcam" playsinline webkit-playsinline></video>
+  <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
   <canvas id="canvas3d"></canvas>
 
   <script>
@@ -102,15 +101,13 @@
 
     // --- CENA THREE.JS ---
     const scene = new THREE.Scene();
-    
-    // Câmera ortográfica/perspectiva ajustada para corresponder à tela 2D da câmera
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 5); // Câmera fixa apontando para o centro
+    camera.position.set(0, 0, 5);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Iluminação para realçar o cinza metálico da luva
+    // Iluminação
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
 
@@ -118,9 +115,157 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- ESTRUTURA DA LUVA CINZA 3D ---
-    const handGroup = new THREE.Group();
-    scene.add(handGroup);
-
+    // --- CRIAÇÃO DE DUAS MÃOS CINZAS 3D ---
     const handMaterial = new THREE.MeshStandardMaterial({
-      color: 0
+      color: 0x888888,
+      roughness: 0.3,
+      metalness: 0.5
+    });
+
+    const jointGeo = new THREE.SphereGeometry(0.06, 16, 16);
+    const boneGeo = new THREE.CylinderGeometry(0.03, 0.03, 1, 8);
+
+    // Estrutura para armazenar 2 mãos (índices 0 e 1)
+    const hands3D = [];
+
+    for (let h = 0; h < 2; h++) {
+      const group = new THREE.Group();
+      scene.add(group);
+
+      const joints = [];
+      for (let i = 0; i < 21; i++) {
+        const joint = new THREE.Mesh(jointGeo, handMaterial);
+        joint.visible = false;
+        group.add(joint);
+        joints.push(joint);
+      }
+
+      const bones = [];
+      for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
+        const bone = new THREE.Mesh(boneGeo, handMaterial);
+        bone.visible = false;
+        group.add(bone);
+        bones.push(bone);
+      }
+
+      hands3D.push({ group, joints, bones });
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    function mapTo3DSpace(lm) {
+      const fov = THREE.MathUtils.degToRad(camera.fov);
+      const distance = 5;
+      const height = 2 * Math.tan(fov / 2) * distance;
+      const width = height * camera.aspect;
+
+      const x = (lm.x - 0.5) * width;
+      const y = -(lm.y - 0.5) * height;
+      const z = -lm.z * width;
+
+      return new THREE.Vector3(x, y, z);
+    }
+
+    // --- MEDIAPIPE HANDS (CONFIGURADO PARA 2 MÃOS) ---
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2, // <--- Agora rastreia até 2 mãos simultaneamente
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+
+    hands.onResults((results) => {
+      // Esconde todas as mãos antes do processamento do quadro
+      hands3D.forEach(h => {
+        h.joints.forEach(j => j.visible = false);
+        h.bones.forEach(b => b.visible = false);
+      });
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        results.multiHandLandmarks.forEach((landmarks, handIndex) => {
+          if (handIndex >= 2) return; // Limita a 2 mãos
+
+          const h3d = hands3D[handIndex];
+
+          // Atualiza posições das articulações
+          landmarks.forEach((lm, index) => {
+            const pos = mapTo3DSpace(lm);
+            h3d.joints[index].position.copy(pos);
+            h3d.joints[index].visible = true;
+          });
+
+          // Atualiza ossos/conexões
+          HAND_CONNECTIONS.forEach((conn, index) => {
+            const p1 = h3d.joints[conn[0]].position;
+            const p2 = h3d.joints[conn[1]].position;
+
+            const bone = h3d.bones[index];
+            const dist = p1.distanceTo(p2);
+
+            bone.scale.set(1, dist, 1);
+            bone.position.copy(p1).add(p2).multiplyScalar(0.5);
+            bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
+            bone.visible = true;
+          });
+        });
+      }
+    });
+
+    // --- INICIALIZAÇÃO DA CÂMERA ---
+    startBtn.addEventListener('click', async () => {
+      log.innerText = "Acessando câmera...";
+      startBtn.style.display = "none";
+
+      try {
+        const constraints = {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play();
+            resolve();
+          };
+        });
+
+        log.innerText = "Câmera Ativa! Coloque as duas mãos na tela.";
+
+        const processFrame = async () => {
+          if (!video.paused && !video.ended) {
+            await hands.send({ image: video });
+          }
+          requestAnimationFrame(processFrame);
+        };
+        processFrame();
+
+      } catch (err) {
+        console.error(err);
+        log.innerText = "Erro ao carregar câmera: " + err.message;
+        startBtn.style.display = "block";
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
