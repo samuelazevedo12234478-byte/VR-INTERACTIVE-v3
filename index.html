@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meta Quest Spatial OS - Mão Virtual (Volume Cinza)</title>
+  <title>Meta Quest Spatial OS - Mão Virtual (Ajustada)</title>
   
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -12,32 +12,23 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body, html { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: sans-serif; }
-    .a-enter-vr { display: none !important; }
-    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
-    a-scene { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
-    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
-    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 50px; cursor: pointer; }
-    #statusLog { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200; color: #1e293b; font-size: 0.9rem; font-weight: 700; background: rgba(255, 255, 255, 0.92); padding: 10px 24px; border-radius: 30px; border: 2px solid #f97316; }
+    /* Mantive o espelhamento para o movimento ficar natural */
+    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; transform: scaleX(-1); }
+    #hand_canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); }
+    #startBtn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; padding: 18px 36px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: #f97316; border: none; border-radius: 50px; cursor: pointer; }
   </style>
 </head>
 <body>
 
-  <button id="startBtn">🚀 Iniciar AR</button>
-  <div id="statusLog">Clique para iniciar</div>
-  
+  <button id="startBtn">🚀 Iniciar Mão Virtual Ajustada</button>
   <video id="webcam" playsinline autoplay muted></video>
   <canvas id="hand_canvas"></canvas>
-
-  <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
-    <a-entity id="main-camera" camera look-controls="enabled: true; magicWindowTrackingEnabled: true" position="0 1.6 0"></a-entity>
-  </a-scene>
 
   <script>
     const videoElement = document.getElementById('webcam');
     const handCanvas = document.getElementById('hand_canvas');
     const handCtx = handCanvas.getContext('2d');
     const startBtn = document.getElementById('startBtn');
-    const statusLog = document.getElementById('statusLog');
 
     function updateCanvasSize() {
       handCanvas.width = window.innerWidth;
@@ -46,63 +37,51 @@
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-
-    hands.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
+    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
     hands.onResults((results) => {
-      handCtx.save();
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
           drawQuestHandMesh(landmarks);
         }
       }
-      handCtx.restore();
     });
 
     function drawQuestHandMesh(landmarks) {
       const screenW = handCanvas.width;
       const screenH = handCanvas.height;
-
+      
+      // Cálculo para escala e alinhamento
       const wrist = landmarks[0];
       const middleBase = landmarks[9];
       const palmSize = Math.hypot((middleBase.x - wrist.x) * screenW, (middleBase.y - wrist.y) * screenH);
       
-      // Espessura do dedo
-      const fingerThickness = Math.max(14, palmSize * 0.18);
+      // Aumentei um pouco mais a espessura para cobrir melhor os dedos reais
+      const fingerThickness = Math.max(28, palmSize * 0.32); 
 
       const getPos = (idx) => ({ x: landmarks[idx].x * screenW, y: landmarks[idx].y * screenH });
 
-      // Configuração para ficar "redondinho"
       handCtx.lineCap = 'round';
       handCtx.lineJoin = 'round';
 
+      // Dedos (Aumentado para incluir a base para não ficar "buraco" na palma)
       const fingers = [
-        [0, 1, 2, 3, 4],     // Polegar
-        [0, 5, 6, 7, 8],     // Indicador
-        [0, 9, 10, 11, 12],  // Médio
-        [0, 13, 14, 15, 16], // Anelar
-        [0, 17, 18, 19, 20]  // Mínimo
+        [0, 1, 2, 3, 4],     
+        [0, 5, 6, 7, 8],     
+        [0, 9, 10, 11, 12],  
+        [0, 13, 14, 15, 16], 
+        [0, 17, 18, 19, 20]  
       ];
 
-      // A COR DA "PELE" (Cinza com transparência)
-      const skinColor = 'rgba(200, 205, 215, 0.45)';
+      const skinColor = 'rgba(200, 205, 215, 0.5)'; // Cor da pele cinza
 
-      // DESENHO: Usamos a mesma cor para o STROKE (contorno) e FILL (preenchimento)
-      // Assim, a linha "desaparece" dentro do volume da cor
       handCtx.fillStyle = skinColor;
-      handCtx.strokeStyle = skinColor; 
+      handCtx.strokeStyle = skinColor;
       handCtx.lineWidth = fingerThickness;
 
-      // Desenha os dedos (Volume cinza, sem linha interna visível)
+      // Desenha os dedos (Volume cinza)
       fingers.forEach(finger => {
         handCtx.beginPath();
         finger.forEach((idx, i) => {
@@ -110,11 +89,12 @@
           if (i === 0) handCtx.moveTo(pos.x, pos.y);
           else handCtx.lineTo(pos.x, pos.y);
         });
-        handCtx.stroke(); // Desenha o contorno com a mesma cor da pele
+        handCtx.stroke();
+        handCtx.fill(); 
       });
 
-      // Desenha a palma da mão (Volume cinza)
-      const palmIndices = [0, 1, 5, 9, 13, 17];
+      // AUMENTA A PALMA: Adicionei mais pontos de contorno para a mão parecer mais "cheia" e menos torta
+      const palmIndices = [0, 1, 2, 5, 9, 13, 17, 18, 0];
       handCtx.beginPath();
       const startPalm = getPos(palmIndices[0]);
       handCtx.moveTo(startPalm.x, startPalm.y);
@@ -130,12 +110,12 @@
       startBtn.style.display = 'none';
       const camera = new Camera(videoElement, {
         onFrame: async () => { await hands.send({ image: videoElement }); },
-        width: 1280, height: 720, facingMode: 'environment'
+        width: 1280, height: 720, facingMode: 'user' 
       });
       await camera.start();
-      statusLog.innerText = "✨ Mão Cinza (Volume Redondo)";
     }
     startBtn.addEventListener('click', startApp);
   </script>
 </body>
 </html>
+
