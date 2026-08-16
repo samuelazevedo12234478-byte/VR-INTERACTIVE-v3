@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Mão Presa à Câmera</title>
+  <title>MR VR Box - Mão e Raio Corrigidos</title>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,14 +39,14 @@
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     
-    // Grupo que o GIROSCÓPIO movimenta (Câmera + Mãos acompanham a cabeça)
+    // Grupo controlado pelo Giroscópio
     const cameraGroup = new THREE.Group();
     cameraGroup.add(camera);
     scene.add(cameraGroup);
 
-    // Grupo ONDE AS MÃOS FICAM PRESA (para não sofrer o giro do mundo)
+    // Mãos ancoradas diretamente na câmera
     const handsGroupContainer = new THREE.Group();
-    camera.add(handsGroupContainer); // <--- MÃOS DENTRO DA CÂMERA!
+    camera.add(handsGroupContainer);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -58,9 +58,9 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- PAINEL 3D (FICA FIXO NO MUNDO DENTRO DA SCENE) ---
+    // --- PAINEL 3D (TELA FIXA NA CENA) ---
     const uiGroup = new THREE.Group();
-    uiGroup.position.set(0, 0, -3); // 3 metros na frente do ponto inicial
+    uiGroup.position.set(0, 0, -3);
     scene.add(uiGroup);
 
     const panelGeo = new THREE.PlaneGeometry(2.4, 1.4);
@@ -86,7 +86,7 @@
     sliderKnob.position.set(0, -0.3, 0.08);
     uiGroup.add(sliderKnob);
 
-    // --- MÃOS 3D E RAIOS (ADICIONADAS DENTRO DO handsGroupContainer) ---
+    // --- MÃOS 3D E RAIOS ---
     const handMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.5 });
     const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
     const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
@@ -97,7 +97,7 @@
     const hands3D = [];
     for (let h = 0; h < 2; h++) {
       const group = new THREE.Group();
-      handsGroupContainer.add(group); // Preso na câmera!
+      handsGroupContainer.add(group);
 
       const joints = [];
       for (let i = 0; i < 21; i++) {
@@ -117,7 +117,7 @@
 
       const palmRay = new THREE.Line(rayGeo, rayMat.clone());
       palmRay.visible = false;
-      handsGroupContainer.add(palmRay); // Preso na câmera!
+      handsGroupContainer.add(palmRay);
 
       hands3D.push({ group, joints, bones, palmRay });
     }
@@ -132,14 +132,15 @@
     }
     animate();
 
+    // MAPEAMENTO CORRIGIDO: Mão Direita = Lado Direito / Mão Esquerda = Lado Esquerdo
     function mapTo3DSpace(lm) {
       const fov = THREE.MathUtils.degToRad(camera.fov);
-      const distance = 2.5; // Distância fixa na frente da câmera
+      const distance = 2.5;
       const height = 2 * Math.tan(fov / 2) * distance;
       const width = height * camera.aspect;
 
-      // Inverte X para bater com a câmera frontal/traseira espelhada
-      const x = (0.5 - lm.x) * width;
+      // Usando (lm.x - 0.5) corrigimos a inversão dos lados
+      const x = (lm.x - 0.5) * width;
       const y = -(lm.y - 0.5) * height;
       const z = -distance + (-lm.z * 1.5);
 
@@ -170,6 +171,7 @@
           if (handIndex >= 2) return;
 
           const h3d = hands3D[handIndex];
+          const isRightHand = results.multiHandedness[handIndex].label === 'Right';
 
           landmarks.forEach((lm, index) => {
             const pos = mapTo3DSpace(lm);
@@ -196,23 +198,29 @@
             const indexBasePos = h3d.joints[5].position;
             const pinkyBasePos = h3d.joints[17].position;
 
-            // Ponto central da palma
             const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
             
-            // Vetor normal apontando PARA A FRENTE DA PALMA (saindo da mão em direção à tela)
             const v1 = new THREE.Vector3().subVectors(indexBasePos, wristPos);
             const v2 = new THREE.Vector3().subVectors(pinkyBasePos, wristPos);
             
-            // Invertemos a ordem no cross product para apontar para a FRENTE (fiozinho pra frente)
-            const palmForward = new THREE.Vector3().crossVectors(v2, v1).normalize();
+            // Direção do produto vetorial ajustada de acordo com qual mão está em tela
+            let palmForward;
+            if (isRightHand) {
+              palmForward = new THREE.Vector3().crossVectors(v1, v2).normalize();
+            } else {
+              palmForward = new THREE.Vector3().crossVectors(v2, v1).normalize();
+            }
 
-            // Seta a posição do raio saindo da palma
+            // Garante que o raio sempre saia em direção à tela (-Z no espaço local)
+            if (palmForward.z > 0) {
+              palmForward.negate();
+            }
+
             h3d.palmRay.position.copy(palmCenter);
             const targetPos = palmCenter.clone().add(palmForward.clone().multiplyScalar(10));
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
-            // Raycaster convertendo a posição local para a cena do mundo
             const worldPalmPos = palmCenter.clone().applyMatrix4(camera.matrixWorld);
             const worldForward = palmForward.clone().transformDirection(camera.matrixWorld);
 
@@ -256,7 +264,7 @@
       }
     });
 
-    // --- GIROSCÓPIO (Roda APENAS a câmera, as mãos continuam presas a ela) ---
+    // --- GIROSCÓPIO ---
     const zee = new THREE.Vector3(0, 0, 1);
     const euler = new THREE.Euler();
     const q0 = new THREE.Quaternion();
