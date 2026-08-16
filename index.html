@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Mão e Raio Corrigidos</title>
+  <title>MR VR Box - Raio Orientado pela Palma</title>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,26 +39,26 @@
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     
-    // Grupo controlado pelo Giroscópio
+    // Grupo movido pelo Giroscópio
     const cameraGroup = new THREE.Group();
     cameraGroup.add(camera);
     scene.add(cameraGroup);
 
-    // Mãos ancoradas diretamente na câmera
+    // Mãos presas à câmera
     const handsGroupContainer = new THREE.Group();
     camera.add(handsGroupContainer);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Luzes
+    // Iluminação
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- PAINEL 3D (TELA FIXA NA CENA) ---
+    // --- PAINEL 3D (NA CENA) ---
     const uiGroup = new THREE.Group();
     uiGroup.position.set(0, 0, -3);
     scene.add(uiGroup);
@@ -132,14 +132,12 @@
     }
     animate();
 
-    // MAPEAMENTO CORRIGIDO: Mão Direita = Lado Direito / Mão Esquerda = Lado Esquerdo
     function mapTo3DSpace(lm) {
       const fov = THREE.MathUtils.degToRad(camera.fov);
       const distance = 2.5;
       const height = 2 * Math.tan(fov / 2) * distance;
       const width = height * camera.aspect;
 
-      // Usando (lm.x - 0.5) corrigimos a inversão dos lados
       const x = (lm.x - 0.5) * width;
       const y = -(lm.y - 0.5) * height;
       const z = -distance + (-lm.z * 1.5);
@@ -198,12 +196,14 @@
             const indexBasePos = h3d.joints[5].position;
             const pinkyBasePos = h3d.joints[17].position;
 
+            // Ponto do centro da palma
             const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
             
+            // Vetores de orientação do plano da palma
             const v1 = new THREE.Vector3().subVectors(indexBasePos, wristPos);
             const v2 = new THREE.Vector3().subVectors(pinkyBasePos, wristPos);
             
-            // Direção do produto vetorial ajustada de acordo com qual mão está em tela
+            // Calculamos o vetor PERPENDICULAR (Normal) da palma sem NENHUMA trava
             let palmForward;
             if (isRightHand) {
               palmForward = new THREE.Vector3().crossVectors(v1, v2).normalize();
@@ -211,16 +211,13 @@
               palmForward = new THREE.Vector3().crossVectors(v2, v1).normalize();
             }
 
-            // Garante que o raio sempre saia em direção à tela (-Z no espaço local)
-            if (palmForward.z > 0) {
-              palmForward.negate();
-            }
-
+            // O raio nasce na palma e segue exatamente a rotação livre da palma
             h3d.palmRay.position.copy(palmCenter);
             const targetPos = palmCenter.clone().add(palmForward.clone().multiplyScalar(10));
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
+            // Converte a física do raio para a cena do mundo 3D
             const worldPalmPos = palmCenter.clone().applyMatrix4(camera.matrixWorld);
             const worldForward = palmForward.clone().transformDirection(camera.matrixWorld);
 
@@ -342,4 +339,3 @@
   </script>
 </body>
 </html>
-
