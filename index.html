@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Final</title>
+  <title>MR VR Box - Mão Presa à Câmera</title>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,7 +23,7 @@
 
   <div id="ui-container">
     <button id="startBtn">LIGAR VR PAISAGEM</button>
-    <div id="log">Gire o celular em paisagem e toque no botão.</div>
+    <div id="log">Coloque o celular em paisagem e toque no botão.</div>
   </div>
 
   <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
@@ -39,9 +39,14 @@
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     
+    // Grupo que o GIROSCÓPIO movimenta (Câmera + Mãos acompanham a cabeça)
     const cameraGroup = new THREE.Group();
     cameraGroup.add(camera);
     scene.add(cameraGroup);
+
+    // Grupo ONDE AS MÃOS FICAM PRESA (para não sofrer o giro do mundo)
+    const handsGroupContainer = new THREE.Group();
+    camera.add(handsGroupContainer); // <--- MÃOS DENTRO DA CÂMERA!
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -53,9 +58,9 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- PAINEL 3D (TELA COM BOTÃO E SLIDER) ---
+    // --- PAINEL 3D (FICA FIXO NO MUNDO DENTRO DA SCENE) ---
     const uiGroup = new THREE.Group();
-    uiGroup.position.set(0, 0, -3);
+    uiGroup.position.set(0, 0, -3); // 3 metros na frente do ponto inicial
     scene.add(uiGroup);
 
     const panelGeo = new THREE.PlaneGeometry(2.4, 1.4);
@@ -81,18 +86,18 @@
     sliderKnob.position.set(0, -0.3, 0.08);
     uiGroup.add(sliderKnob);
 
-    // --- MÃOS 3D E RAIOS ---
+    // --- MÃOS 3D E RAIOS (ADICIONADAS DENTRO DO handsGroupContainer) ---
     const handMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.5 });
     const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
     const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
 
-    const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+    const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 4 });
     const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -10)]);
 
     const hands3D = [];
     for (let h = 0; h < 2; h++) {
       const group = new THREE.Group();
-      scene.add(group);
+      handsGroupContainer.add(group); // Preso na câmera!
 
       const joints = [];
       for (let i = 0; i < 21; i++) {
@@ -112,7 +117,7 @@
 
       const palmRay = new THREE.Line(rayGeo, rayMat.clone());
       palmRay.visible = false;
-      scene.add(palmRay);
+      handsGroupContainer.add(palmRay); // Preso na câmera!
 
       hands3D.push({ group, joints, bones, palmRay });
     }
@@ -129,13 +134,14 @@
 
     function mapTo3DSpace(lm) {
       const fov = THREE.MathUtils.degToRad(camera.fov);
-      const distance = 5;
+      const distance = 2.5; // Distância fixa na frente da câmera
       const height = 2 * Math.tan(fov / 2) * distance;
       const width = height * camera.aspect;
 
-      const x = (lm.x - 0.5) * width;
+      // Inverte X para bater com a câmera frontal/traseira espelhada
+      const x = (0.5 - lm.x) * width;
       const y = -(lm.y - 0.5) * height;
-      const z = -lm.z * width;
+      const z = -distance + (-lm.z * 1.5);
 
       return new THREE.Vector3(x, y, z);
     }
@@ -190,18 +196,27 @@
             const indexBasePos = h3d.joints[5].position;
             const pinkyBasePos = h3d.joints[17].position;
 
+            // Ponto central da palma
             const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
             
+            // Vetor normal apontando PARA A FRENTE DA PALMA (saindo da mão em direção à tela)
             const v1 = new THREE.Vector3().subVectors(indexBasePos, wristPos);
             const v2 = new THREE.Vector3().subVectors(pinkyBasePos, wristPos);
-            const palmForward = new THREE.Vector3().crossVectors(v1, v2).normalize();
+            
+            // Invertemos a ordem no cross product para apontar para a FRENTE (fiozinho pra frente)
+            const palmForward = new THREE.Vector3().crossVectors(v2, v1).normalize();
 
-            h3d.palmRay.position.copy(palmCenter).add(palmForward.clone().multiplyScalar(0.1));
-            const targetPos = h3d.palmRay.position.clone().add(palmForward.clone().multiplyScalar(10));
+            // Seta a posição do raio saindo da palma
+            h3d.palmRay.position.copy(palmCenter);
+            const targetPos = palmCenter.clone().add(palmForward.clone().multiplyScalar(10));
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
-            raycaster.set(h3d.palmRay.position, palmForward);
+            // Raycaster convertendo a posição local para a cena do mundo
+            const worldPalmPos = palmCenter.clone().applyMatrix4(camera.matrixWorld);
+            const worldForward = palmForward.clone().transformDirection(camera.matrixWorld);
+
+            raycaster.set(worldPalmPos, worldForward);
             const intersects = raycaster.intersectObjects([button3D, sliderKnob]);
 
             const thumbTip = h3d.joints[4].position;
@@ -241,7 +256,7 @@
       }
     });
 
-    // --- GIROSCÓPIO EM MODO PAISAGEM ---
+    // --- GIROSCÓPIO (Roda APENAS a câmera, as mãos continuam presas a ela) ---
     const zee = new THREE.Vector3(0, 0, 1);
     const euler = new THREE.Euler();
     const q0 = new THREE.Quaternion();
@@ -262,7 +277,7 @@
     }
 
     startBtn.addEventListener('click', async () => {
-      log.innerText = "Iniciando câmera e giroscópio...";
+      log.innerText = "Iniciando VR...";
 
       if (screen.orientation && screen.orientation.lock) {
         screen.orientation.lock('landscape').catch(() => {});
@@ -319,3 +334,4 @@
   </script>
 </body>
 </html>
+
