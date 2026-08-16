@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Realidade Mista - Ajustada</title>
+  <title>MR VR Box - Giroscópio & Slider</title>
   
   <style>
     * {
@@ -41,48 +41,27 @@
       pointer-events: none;
     }
 
-    /* Tela 2D/3D Integrada do Google */
-    #google-frame-container {
-      position: absolute;
-      top: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 85vw;
-      max-width: 650px;
-      height: 50vh;
-      z-index: 3;
-      border: 3px solid #0066ff;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #fff;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.7);
-    }
-
-    #google-frame {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
     #ui-container {
       position: fixed;
-      top: 15px;
+      top: 20px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 9999;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      width: 90%;
+      max-width: 400px;
     }
 
     #startBtn {
-      padding: 14px 28px;
-      font-size: 1rem;
+      padding: 16px 32px;
+      font-size: 1.1rem;
       font-weight: bold;
       color: #ffffff;
       background: #0066ff;
-      border: 2px solid #ffffff;
+      border: 3px solid #ffffff;
       border-radius: 30px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.5);
       cursor: pointer;
@@ -91,14 +70,14 @@
     #log {
       background: rgba(0, 0, 0, 0.85);
       color: #00ff88;
-      padding: 6px 12px;
-      border-radius: 15px;
-      font-size: 0.8rem;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
       text-align: center;
+      width: 100%;
     }
   </style>
 
-  <!-- CDNs: Three.js e MediaPipe -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -106,13 +85,8 @@
 <body>
 
   <div id="ui-container">
-    <button id="startBtn">LIGAR SISTEMA</button>
-    <div id="log">Clique para alinhar as mãos e carregar a tela.</div>
-  </div>
-
-  <!-- Janela do Buscador estilo Google em AR -->
-  <div id="google-frame-container">
-    <iframe id="google-frame" src="https://html.duckduckgo.com/html/?q=Google"></iframe>
+    <button id="startBtn">LIGAR CÂMERA & VR</button>
+    <div id="log">Toque no botão para iniciar no modo Paisagem.</div>
   </div>
 
   <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
@@ -124,10 +98,10 @@
     const startBtn = document.getElementById('startBtn');
     const log = document.getElementById('log');
 
-    // --- CENA THREE.JS (CÂMERA TRAVADA RETINHA) ---
+    // --- CENA THREE.JS ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 5); // Posição fixa sem inclinação
+    camera.position.set(0, 0, 0); // Câmera no centro para o giroscópio rodar ao redor
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -140,18 +114,48 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- DUAS MÃOS 3D CINZAS ---
-    const handMaterial = new THREE.MeshStandardMaterial({
-      color: 0x888888,
-      roughness: 0.3,
-      metalness: 0.5
-    });
+    // --- PAINEL / TELA VIRTUAL 3D (À FRENTE) ---
+    const uiGroup = new THREE.Group();
+    uiGroup.position.set(0, 0, -3); // Fica 3 unidades à frente da câmera
+    scene.add(uiGroup);
 
+    // Fundo da Tela
+    const panelGeo = new THREE.PlaneGeometry(2.4, 1.4);
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.4, side: THREE.DoubleSide });
+    const panelMesh = new THREE.Mesh(panelGeo, panelMat);
+    uiGroup.add(panelMesh);
+
+    // 1. Botão 3D
+    const btnGeo = new THREE.BoxGeometry(0.8, 0.3, 0.08);
+    const btnMat = new THREE.MeshStandardMaterial({ color: 0x0066ff });
+    const button3D = new THREE.Mesh(btnGeo, btnMat);
+    button3D.position.set(0, 0.3, 0.05);
+    uiGroup.add(button3D);
+
+    // 2. Slider Horizontal (Estilo Volume deitado)
+    const trackGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.6, 16);
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+    const sliderTrack = new THREE.Mesh(trackGeo, trackMat);
+    sliderTrack.rotation.z = Math.PI / 2; // Deita o cilindro horizontalmente
+    sliderTrack.position.set(0, -0.3, 0.05);
+    uiGroup.add(sliderTrack);
+
+    // Bolinha do Slider
+    const knobGeo = new THREE.SphereGeometry(0.09, 16, 16);
+    const knobMat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+    const sliderKnob = new THREE.Mesh(knobGeo, knobMat);
+    sliderKnob.position.set(0, -0.3, 0.08); // Inicia no centro
+    uiGroup.add(sliderKnob);
+
+    // --- MÃOS 3D E RAIOS DA PALMA ---
+    const handMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.5 });
     const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
     const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
 
-    const hands3D = [];
+    const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+    const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -10)]);
 
+    const hands3D = [];
     for (let h = 0; h < 2; h++) {
       const group = new THREE.Group();
       scene.add(group);
@@ -172,8 +176,18 @@
         bones.push(bone);
       }
 
-      hands3D.push({ group, joints, bones });
+      // Linha/Raio da Palma
+      const palmRay = new THREE.Line(rayGeo, rayMat.clone());
+      palmRay.visible = false;
+      scene.add(palmRay);
+
+      hands3D.push({ group, joints, bones, palmRay });
     }
+
+    // --- LÓGICA DE TEMPO (CLIQUE VS ARRASTAR) ---
+    let tempoInicioPinch = 0;
+    let estaSegurando = false;
+    let raycaster = new THREE.Raycaster();
 
     function animate() {
       requestAnimationFrame(animate);
@@ -181,7 +195,6 @@
     }
     animate();
 
-    // Mapeamento preciso para a luva grudar na sua mão real
     function mapTo3DSpace(lm) {
       const fov = THREE.MathUtils.degToRad(camera.fov);
       const distance = 5;
@@ -211,6 +224,7 @@
       hands3D.forEach(h => {
         h.joints.forEach(j => j.visible = false);
         h.bones.forEach(b => b.visible = false);
+        h.palmRay.visible = false;
       });
 
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
@@ -237,22 +251,105 @@
             bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
             bone.visible = true;
           });
+
+          // --- CONFIGURAÇÃO DO RAIO SAINDO DA PALMA ---
+          if (h3d.joints[0].visible && h3d.joints[9].visible) {
+            const wristPos = h3d.joints[0].position;
+            const middleBasePos = h3d.joints[9].position;
+
+            const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
+            const rayDir = new THREE.Vector3().subVectors(middleBasePos, wristPos).normalize();
+
+            h3d.palmRay.position.copy(palmCenter);
+            const targetPos = palmCenter.clone().add(rayDir.clone().multiplyScalar(10));
+            h3d.palmRay.lookAt(targetPos);
+            h3d.palmRay.visible = true;
+
+            // Interseção / Mira no Espaço
+            raycaster.set(palmCenter, rayDir);
+            const intersects = raycaster.intersectObjects([button3D, sliderKnob]);
+
+            // Detecção de Gesto (Pinch/Mão Fechada)
+            const thumbTip = h3d.joints[4].position;
+            const indexTip = h3d.joints[8].position;
+            const distancePinch = thumbTip.distanceTo(indexTip);
+
+            if (distancePinch < 0.25) { // Mão Fechada
+              if (tempoInicioPinch === 0) tempoInicioPinch = Date.now();
+              const tempoPassado = Date.now() - tempoInicioPinch;
+
+              if (tempoPassado >= 1000) { // MAIS DE 1 SEGUNDO = ARRASTAR
+                estaSegurando = true;
+                h3d.palmRay.material.color.setHex(0x00ff00); // Verde
+
+                // Arrastar a bolinha do Slider para os lados
+                if (intersects.length > 0 && intersects[0].object === sliderKnob || estaSegurando) {
+                  const localX = palmCenter.x;
+                  // Limita o movimento dentro da barra (-0.8 até 0.8)
+                  sliderKnob.position.x = Math.max(-0.8, Math.min(0.8, localX));
+                }
+              } else {
+                h3d.palmRay.material.color.setHex(0xffff00); // Amarelo (Carregando)
+              }
+            } else { // Mão Aberta
+              if (tempoInicioPinch > 0) {
+                const tempoTotal = Date.now() - tempoInicioPinch;
+                if (tempoTotal < 1000 && !estaSegurando) { // MENOS DE 1 SEGUNDO = CLIQUE
+                  if (intersects.length > 0 && intersects[0].object === button3D) {
+                    // Efeito visual no Botão ao clicar
+                    button3D.material.color.setHex(Math.random() * 0xffffff);
+                    log.innerText = "Botão Clicado!";
+                  }
+                }
+              }
+              tempoInicioPinch = 0;
+              estaSegurando = false;
+              h3d.palmRay.material.color.setHex(0xffffff); // Branco
+            }
+          }
         });
       }
     });
 
-    // --- ATIVAÇÃO DA CÂMERA ---
+    // --- CONTROLE POR GIROSCÓPIO (MODO PAISAGEM OBRIGATÓRIO) ---
+    function handleOrientation(event) {
+      if (!event.alpha) return;
+
+      // Conversão dos ângulos do giroscópio para rotação em radianos
+      const alpha = THREE.MathUtils.degToRad(event.alpha || 0);
+      const beta = THREE.MathUtils.degToRad(event.beta || 0);
+      const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
+
+      // Trava e ajusta a rotação para o modo Paisagem (Landscape)
+      camera.rotation.set(beta, gamma, alpha, 'YXZ');
+    }
+
+    // --- INICIALIZAÇÃO E SOLICITAÇÃO DE PERMISSÕES ---
     startBtn.addEventListener('click', async () => {
-      log.innerText = "Iniciando câmera...";
+      log.innerText = "Acessando câmera e giroscópio...";
+
+      // Solicita bloqueio de orientação para Paisagem no celular
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+
+      // Permissão para Giroscópio (Necessário no iOS e Androids novos)
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const response = await DeviceOrientationEvent.requestPermission();
+          if (response === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          }
+        } catch (e) { console.error(e); }
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+
       startBtn.style.display = "none";
 
       try {
         const constraints = {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false
         };
 
@@ -260,13 +357,10 @@
         video.srcObject = stream;
         
         await new Promise((resolve) => {
-          video.onloadedmetadata = () => {
-            video.play();
-            resolve();
-          };
+          video.onloadedmetadata = () => { video.play(); resolve(); };
         });
 
-        log.innerText = "Sistema Ativo! Mãos alinhadas e busca pronta.";
+        log.innerText = "Sistema Ativo! Mire o raio no botão ou no slider.";
 
         const processFrame = async () => {
           if (!video.paused && !video.ended) {
@@ -278,7 +372,7 @@
 
       } catch (err) {
         console.error(err);
-        log.innerText = "Erro na câmera: " + err.message;
+        log.innerText = "Erro ao carregar câmera: " + err.message;
         startBtn.style.display = "block";
       }
     });
