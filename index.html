@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Raio Orientado pela Palma</title>
+  <title>MR VR Box - Tela Afastada</title>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -58,9 +58,9 @@
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- PAINEL 3D (NA CENA) ---
+    // --- PAINEL 3D (TELA AFASTADA PARA -4.5) ---
     const uiGroup = new THREE.Group();
-    uiGroup.position.set(0, 0, -3);
+    uiGroup.position.set(0, 0, -4.5); // <--- TELA MAIS LONGE AQUI!
     scene.add(uiGroup);
 
     const panelGeo = new THREE.PlaneGeometry(2.4, 1.4);
@@ -196,14 +196,11 @@
             const indexBasePos = h3d.joints[5].position;
             const pinkyBasePos = h3d.joints[17].position;
 
-            // Ponto do centro da palma
             const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
             
-            // Vetores de orientação do plano da palma
             const v1 = new THREE.Vector3().subVectors(indexBasePos, wristPos);
             const v2 = new THREE.Vector3().subVectors(pinkyBasePos, wristPos);
             
-            // Calculamos o vetor PERPENDICULAR (Normal) da palma sem NENHUMA trava
             let palmForward;
             if (isRightHand) {
               palmForward = new THREE.Vector3().crossVectors(v1, v2).normalize();
@@ -211,13 +208,11 @@
               palmForward = new THREE.Vector3().crossVectors(v2, v1).normalize();
             }
 
-            // O raio nasce na palma e segue exatamente a rotação livre da palma
             h3d.palmRay.position.copy(palmCenter);
             const targetPos = palmCenter.clone().add(palmForward.clone().multiplyScalar(10));
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
-            // Converte a física do raio para a cena do mundo 3D
             const worldPalmPos = palmCenter.clone().applyMatrix4(camera.matrixWorld);
             const worldForward = palmForward.clone().transformDirection(camera.matrixWorld);
 
