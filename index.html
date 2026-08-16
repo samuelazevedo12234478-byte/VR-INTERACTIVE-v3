@@ -3,79 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Giroscópio & Slider</title>
+  <title>MR VR Box - Corrigido</title>
   
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: #000;
-      font-family: Arial, sans-serif;
-    }
-
-    #webcam {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 1;
-      display: block;
-    }
-
-    #canvas3d {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    #ui-container {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      width: 90%;
-      max-width: 400px;
-    }
-
-    #startBtn {
-      padding: 16px 32px;
-      font-size: 1.1rem;
-      font-weight: bold;
-      color: #ffffff;
-      background: #0066ff;
-      border: 3px solid #ffffff;
-      border-radius: 30px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-      cursor: pointer;
-    }
-
-    #log {
-      background: rgba(0, 0, 0, 0.85);
-      color: #00ff88;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 0.85rem;
-      text-align: center;
-      width: 100%;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: Arial, sans-serif; }
+    #webcam { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; display: block; }
+    #canvas3d { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
+    #ui-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 90%; max-width: 400px; }
+    #startBtn { padding: 16px 32px; font-size: 1.1rem; font-weight: bold; color: #ffffff; background: #0066ff; border: 3px solid #ffffff; border-radius: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
+    #log { background: rgba(0, 0, 0, 0.85); color: #00ff88; padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; text-align: center; width: 100%; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -85,8 +22,8 @@
 <body>
 
   <div id="ui-container">
-    <button id="startBtn">LIGAR CÂMERA & VR</button>
-    <div id="log">Toque no botão para iniciar no modo Paisagem.</div>
+    <button id="startBtn">LIGAR VR PAISAGEM</button>
+    <div id="log">Gire o celular em paisagem e toque no botão.</div>
   </div>
 
   <video id="webcam" playsinline webkit-playsinline autoplay muted></video>
@@ -101,53 +38,51 @@
     // --- CENA THREE.JS ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 0); // Câmera no centro para o giroscópio rodar ao redor
+    
+    // Grupo pai para aplicar a rotação de paisagem do Giroscópio
+    const cameraGroup = new THREE.Group();
+    cameraGroup.add(camera);
+    scene.add(cameraGroup);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Iluminação
+    // Luzes
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
-
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(0, 5, 5);
     scene.add(dirLight);
 
-    // --- PAINEL / TELA VIRTUAL 3D (À FRENTE) ---
+    // --- PAINEL 3D (TELA COM BOTÃO E SLIDER) ---
     const uiGroup = new THREE.Group();
-    uiGroup.position.set(0, 0, -3); // Fica 3 unidades à frente da câmera
+    uiGroup.position.set(0, 0, -3);
     scene.add(uiGroup);
 
-    // Fundo da Tela
     const panelGeo = new THREE.PlaneGeometry(2.4, 1.4);
     const panelMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.4, side: THREE.DoubleSide });
-    const panelMesh = new THREE.Mesh(panelGeo, panelMat);
-    uiGroup.add(panelMesh);
+    uiGroup.add(new THREE.Mesh(panelGeo, panelMat));
 
-    // 1. Botão 3D
     const btnGeo = new THREE.BoxGeometry(0.8, 0.3, 0.08);
     const btnMat = new THREE.MeshStandardMaterial({ color: 0x0066ff });
     const button3D = new THREE.Mesh(btnGeo, btnMat);
     button3D.position.set(0, 0.3, 0.05);
     uiGroup.add(button3D);
 
-    // 2. Slider Horizontal (Estilo Volume deitado)
     const trackGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.6, 16);
     const trackMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
     const sliderTrack = new THREE.Mesh(trackGeo, trackMat);
-    sliderTrack.rotation.z = Math.PI / 2; // Deita o cilindro horizontalmente
+    sliderTrack.rotation.z = Math.PI / 2;
     sliderTrack.position.set(0, -0.3, 0.05);
     uiGroup.add(sliderTrack);
 
-    // Bolinha do Slider
     const knobGeo = new THREE.SphereGeometry(0.09, 16, 16);
     const knobMat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
     const sliderKnob = new THREE.Mesh(knobGeo, knobMat);
-    sliderKnob.position.set(0, -0.3, 0.08); // Inicia no centro
+    sliderKnob.position.set(0, -0.3, 0.08);
     uiGroup.add(sliderKnob);
 
-    // --- MÃOS 3D E RAIOS DA PALMA ---
+    // --- MÃOS 3D E RAIOS ---
     const handMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.5 });
     const jointGeo = new THREE.SphereGeometry(0.08, 16, 16);
     const boneGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
@@ -176,7 +111,6 @@
         bones.push(bone);
       }
 
-      // Linha/Raio da Palma
       const palmRay = new THREE.Line(rayGeo, rayMat.clone());
       palmRay.visible = false;
       scene.add(palmRay);
@@ -184,7 +118,6 @@
       hands3D.push({ group, joints, bones, palmRay });
     }
 
-    // --- LÓGICA DE TEMPO (CLIQUE VS ARRASTAR) ---
     let tempoInicioPinch = 0;
     let estaSegurando = false;
     let raycaster = new THREE.Raycaster();
@@ -201,6 +134,7 @@
       const height = 2 * Math.tan(fov / 2) * distance;
       const width = height * camera.aspect;
 
+      // Inverte coordenadas x/y corretamente para o canvas em paisagem
       const x = (lm.x - 0.5) * width;
       const y = -(lm.y - 0.5) * height;
       const z = -lm.z * width;
@@ -216,8 +150,8 @@
     hands.setOptions({
       maxNumHands: 2,
       modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
     });
 
     hands.onResults((results) => {
@@ -252,7 +186,6 @@
             bone.visible = true;
           });
 
-          // --- CONFIGURAÇÃO DO RAIO SAINDO DA PALMA ---
           if (h3d.joints[0].visible && h3d.joints[9].visible) {
             const wristPos = h3d.joints[0].position;
             const middleBasePos = h3d.joints[9].position;
@@ -265,38 +198,32 @@
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
-            // Interseção / Mira no Espaço
             raycaster.set(palmCenter, rayDir);
             const intersects = raycaster.intersectObjects([button3D, sliderKnob]);
 
-            // Detecção de Gesto (Pinch/Mão Fechada)
             const thumbTip = h3d.joints[4].position;
             const indexTip = h3d.joints[8].position;
             const distancePinch = thumbTip.distanceTo(indexTip);
 
-            if (distancePinch < 0.25) { // Mão Fechada
+            if (distancePinch < 0.25) {
               if (tempoInicioPinch === 0) tempoInicioPinch = Date.now();
               const tempoPassado = Date.now() - tempoInicioPinch;
 
-              if (tempoPassado >= 1000) { // MAIS DE 1 SEGUNDO = ARRASTAR
+              if (tempoPassado >= 1000) {
                 estaSegurando = true;
-                h3d.palmRay.material.color.setHex(0x00ff00); // Verde
+                h3d.palmRay.material.color.setHex(0x00ff00);
 
-                // Arrastar a bolinha do Slider para os lados
                 if (intersects.length > 0 && intersects[0].object === sliderKnob || estaSegurando) {
-                  const localX = palmCenter.x;
-                  // Limita o movimento dentro da barra (-0.8 até 0.8)
-                  sliderKnob.position.x = Math.max(-0.8, Math.min(0.8, localX));
+                  sliderKnob.position.x = Math.max(-0.8, Math.min(0.8, palmCenter.x));
                 }
               } else {
-                h3d.palmRay.material.color.setHex(0xffff00); // Amarelo (Carregando)
+                h3d.palmRay.material.color.setHex(0xffff00);
               }
-            } else { // Mão Aberta
+            } else {
               if (tempoInicioPinch > 0) {
                 const tempoTotal = Date.now() - tempoInicioPinch;
-                if (tempoTotal < 1000 && !estaSegurando) { // MENOS DE 1 SEGUNDO = CLIQUE
+                if (tempoTotal < 1000 && !estaSegurando) {
                   if (intersects.length > 0 && intersects[0].object === button3D) {
-                    // Efeito visual no Botão ao clicar
                     button3D.material.color.setHex(Math.random() * 0xffffff);
                     log.innerText = "Botão Clicado!";
                   }
@@ -304,36 +231,40 @@
               }
               tempoInicioPinch = 0;
               estaSegurando = false;
-              h3d.palmRay.material.color.setHex(0xffffff); // Branco
+              h3d.palmRay.material.color.setHex(0xffffff);
             }
           }
         });
       }
     });
 
-    // --- CONTROLE POR GIROSCÓPIO (MODO PAISAGEM OBRIGATÓRIO) ---
+    // --- GIROSCÓPIO CORRIGIDO PARA MODO PAISAGEM ---
+    const zee = new THREE.Vector3(0, 0, 1);
+    const euler = new THREE.Euler();
+    const q0 = new THREE.Quaternion();
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // Rotação de compensação para VR
+
     function handleOrientation(event) {
       if (!event.alpha) return;
 
-      // Conversão dos ângulos do giroscópio para rotação em radianos
-      const alpha = THREE.MathUtils.degToRad(event.alpha || 0);
-      const beta = THREE.MathUtils.degToRad(event.beta || 0);
-      const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
+      const alpha = THREE.MathUtils.degToRad(event.alpha);
+      const beta = THREE.MathUtils.degToRad(event.beta);
+      const gamma = THREE.MathUtils.degToRad(event.gamma);
+      const orient = THREE.MathUtils.degToRad(window.orientation || 90); // Rotação da tela (Paisagem)
 
-      // Trava e ajusta a rotação para o modo Paisagem (Landscape)
-      camera.rotation.set(beta, gamma, alpha, 'YXZ');
+      euler.set(beta, alpha, -gamma, 'YXZ');
+      cameraGroup.quaternion.setFromEuler(euler);
+      cameraGroup.quaternion.multiply(q1);
+      cameraGroup.quaternion.multiply(q0.setFromAxisAngle(zee, -orient));
     }
 
-    // --- INICIALIZAÇÃO E SOLICITAÇÃO DE PERMISSÕES ---
     startBtn.addEventListener('click', async () => {
-      log.innerText = "Acessando câmera e giroscópio...";
+      log.innerText = "Iniciando câmera e giroscópio...";
 
-      // Solicita bloqueio de orientação para Paisagem no celular
       if (screen.orientation && screen.orientation.lock) {
         screen.orientation.lock('landscape').catch(() => {});
       }
 
-      // Permissão para Giroscópio (Necessário no iOS e Androids novos)
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const response = await DeviceOrientationEvent.requestPermission();
@@ -360,7 +291,7 @@
           video.onloadedmetadata = () => { video.play(); resolve(); };
         });
 
-        log.innerText = "Sistema Ativo! Mire o raio no botão ou no slider.";
+        log.innerText = "VR Ativo! Incline a cabeça para olhar ao redor.";
 
         const processFrame = async () => {
           if (!video.paused && !video.ended) {
