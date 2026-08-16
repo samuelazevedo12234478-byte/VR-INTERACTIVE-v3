@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>MR VR Box - Corrigido</title>
+  <title>MR VR Box - Final</title>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,7 +39,6 @@
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     
-    // Grupo pai para aplicar a rotação de paisagem do Giroscópio
     const cameraGroup = new THREE.Group();
     cameraGroup.add(camera);
     scene.add(cameraGroup);
@@ -134,7 +133,6 @@
       const height = 2 * Math.tan(fov / 2) * distance;
       const width = height * camera.aspect;
 
-      // Inverte coordenadas x/y corretamente para o canvas em paisagem
       const x = (lm.x - 0.5) * width;
       const y = -(lm.y - 0.5) * height;
       const z = -lm.z * width;
@@ -189,16 +187,21 @@
           if (h3d.joints[0].visible && h3d.joints[9].visible) {
             const wristPos = h3d.joints[0].position;
             const middleBasePos = h3d.joints[9].position;
+            const indexBasePos = h3d.joints[5].position;
+            const pinkyBasePos = h3d.joints[17].position;
 
             const palmCenter = new THREE.Vector3().addVectors(wristPos, middleBasePos).multiplyScalar(0.5);
-            const rayDir = new THREE.Vector3().subVectors(middleBasePos, wristPos).normalize();
+            
+            const v1 = new THREE.Vector3().subVectors(indexBasePos, wristPos);
+            const v2 = new THREE.Vector3().subVectors(pinkyBasePos, wristPos);
+            const palmForward = new THREE.Vector3().crossVectors(v1, v2).normalize();
 
-            h3d.palmRay.position.copy(palmCenter);
-            const targetPos = palmCenter.clone().add(rayDir.clone().multiplyScalar(10));
+            h3d.palmRay.position.copy(palmCenter).add(palmForward.clone().multiplyScalar(0.1));
+            const targetPos = h3d.palmRay.position.clone().add(palmForward.clone().multiplyScalar(10));
             h3d.palmRay.lookAt(targetPos);
             h3d.palmRay.visible = true;
 
-            raycaster.set(palmCenter, rayDir);
+            raycaster.set(h3d.palmRay.position, palmForward);
             const intersects = raycaster.intersectObjects([button3D, sliderKnob]);
 
             const thumbTip = h3d.joints[4].position;
@@ -238,11 +241,11 @@
       }
     });
 
-    // --- GIROSCÓPIO CORRIGIDO PARA MODO PAISAGEM ---
+    // --- GIROSCÓPIO EM MODO PAISAGEM ---
     const zee = new THREE.Vector3(0, 0, 1);
     const euler = new THREE.Euler();
     const q0 = new THREE.Quaternion();
-    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // Rotação de compensação para VR
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
     function handleOrientation(event) {
       if (!event.alpha) return;
@@ -250,7 +253,7 @@
       const alpha = THREE.MathUtils.degToRad(event.alpha);
       const beta = THREE.MathUtils.degToRad(event.beta);
       const gamma = THREE.MathUtils.degToRad(event.gamma);
-      const orient = THREE.MathUtils.degToRad(window.orientation || 90); // Rotação da tela (Paisagem)
+      const orient = THREE.MathUtils.degToRad(window.orientation || 90);
 
       euler.set(beta, alpha, -gamma, 'YXZ');
       cameraGroup.quaternion.setFromEuler(euler);
@@ -291,7 +294,7 @@
           video.onloadedmetadata = () => { video.play(); resolve(); };
         });
 
-        log.innerText = "VR Ativo! Incline a cabeça para olhar ao redor.";
+        log.innerText = "VR Ativo!";
 
         const processFrame = async () => {
           if (!video.paused && !video.ended) {
